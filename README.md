@@ -48,6 +48,36 @@ Turn on Voice in the grilling room and the investor asks questions out loud. Wit
 
 Every report is saved to your browser's localStorage (the last thirty). A "Past grillings" panel tracks your scores per stage over time. When you face the same stage again, the investor remembers your weakest answers from last time and re-tests at least one of them. Get grilled, fix it, come back, prove it.
 
+## Use it as a library
+
+The web app is one consumer of a small SDK; your code can be another. Models are addressed aisuite-style, as one `"provider:model"` string:
+
+```js
+import { GrillingSession } from "openround"; // or "./index.mjs" from a clone
+
+const session = new GrillingSession({
+  model: "anthropic:claude-opus-5", // or "openai:gpt-5"
+  stage: "seed",                    // pre-seed | seed | series-a
+});
+
+let turn = await session.start(pitchText);
+while (turn.phase === "questions") {
+  console.log(turn.questions);
+  turn = await session.answer(myAnswer);
+}
+console.log(turn.report); // scores, weaknesses, verdict
+```
+
+The key resolves from an `apiKey` option or from the provider's environment variable. `session.retryWeakest()` re-runs the weaknesses from the last report, and a `personaMarkdown` option swaps in your own investor. Try it in the terminal:
+
+```bash
+node examples/sdk-quickstart.mjs anthropic:claude-opus-5 series-a
+```
+
+### Adding a provider
+
+One file. Drop `providers/yourprovider.mjs` exporting `name`, `label`, `defaultModel`, `envKey`, and `chat({apiKey, model, system, messages, schema})` (return the parsed turn object), then register it in `providers/index.mjs`. The SDK, the server, and the web UI's provider dropdown all pick it up from the registry.
+
 ## Personas are an open format
 
 Each investor is one markdown file in [`personas/`](personas/): identity, rubric weights, red flags, question style, pass bar. The format is documented in [`PERSONA_FORMAT.md`](PERSONA_FORMAT.md). If the investors in your region or sector ask differently, write that persona and open a PR. Personas are archetypes built from public knowledge about how each stage evaluates; no real investor is imitated.

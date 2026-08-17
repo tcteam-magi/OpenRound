@@ -1,148 +1,15 @@
-/* OpenRound v0 — static, BYOK, no backend.
-   The persona markdown IS the product: it's injected wholesale into the
-   system prompt, and every turn comes back through one JSON schema so the
-   UI never has to parse investor prose. */
+/* OpenRound web app (a module). The turn schema, system prompt, stages,
+   and provider registry live in core/ and providers/, shared with the SDK. */
 
-"use strict";
+import { TURN_SCHEMA, buildSystemPrompt } from "./core/turn.mjs";
+import { STAGES } from "./core/stages.mjs";
+import { providers, DEFAULT_MODELS } from "./providers/index.mjs";
 
-// ---------------------------------------------------------------- stages
-const STAGES = [
-  {
-    id: "pre-seed",
-    name: "Pre-seed",
-    who: "The Angel",
-    desc: "Founder-market fit, size of vision, your core hypothesis. Numbers barely matter yet — your clarity does.",
-    file: "personas/pre-seed-angel.md",
-  },
-  {
-    id: "seed",
-    name: "Seed",
-    who: "The Seed VC",
-    desc: "What your traction means, ICP clarity, GTM hypothesis, why now. Every claim needs a denominator.",
-    file: "personas/seed-vc.md",
-  },
-  {
-    id: "series-a",
-    name: "Series A",
-    who: "The Metrics Partner",
-    desc: "ARR quality, retention cohorts, burn multiple, a sales machine that works without you. The story is the numbers.",
-    file: "personas/series-a-partner.md",
-  },
-];
-
-// ------------------------------------------------------- structured output
-// Constraints per structured-outputs rules: additionalProperties:false,
-// everything required, nullability via anyOf.
-const REPORT_SCHEMA = {
-  type: "object",
-  properties: {
-    scores: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          criterion: { type: "string" },
-          weight: { type: "integer" },
-          score: { type: "integer" },
-          comment: { type: "string" },
-        },
-        required: ["criterion", "weight", "score", "comment"],
-        additionalProperties: false,
-      },
-    },
-    weaknesses: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          question: { type: "string" },
-          your_answer_gist: { type: "string" },
-          why_it_hurt: { type: "string" },
-        },
-        required: ["question", "your_answer_gist", "why_it_hurt"],
-        additionalProperties: false,
-      },
-    },
-    verdict: { type: "string" },
-  },
-  required: ["scores", "weaknesses", "verdict"],
-  additionalProperties: false,
-};
-
-const TURN_SCHEMA = {
-  type: "object",
-  properties: {
-    phase: { type: "string", enum: ["questions", "report"] },
-    round_label: { type: "string" },
-    commentary: { type: "string" },
-    questions: { type: "array", items: { type: "string" } },
-    report: { anyOf: [{ type: "null" }, REPORT_SCHEMA] },
-  },
-  required: ["phase", "round_label", "commentary", "questions", "report"],
-  additionalProperties: false,
-};
-
-// ------------------------------------------------------------ system prompt
-function buildSystemPrompt(personaMd, priorWeaknesses) {
-  const history = priorWeaknesses && priorWeaknesses.length
-    ? `
-
-FOUNDER HISTORY
-You have grilled this founder before. Last time, their weakest answers were:
-${priorWeaknesses.map((w) => `- ${w.question} — ${w.why_it_hurt}`).join("\n")}
-Weave at least one question that re-tests whether they have fixed the weakest
-of these into Round 2 or Round 3, in your own words. If they have clearly
-improved on a past weakness, say so in the report — in character, briefly.`
-    : "";
-  return `You are conducting a live pitch-grilling session. Adopt, completely and
-in character, the investor persona defined between the markers below. The
-persona file is your identity, your evaluation rubric, your red flags, your
-question style, and your pass bar. Never break character, never mention that
-you are an AI, and never soften a finding to be nice — the founder is here
-precisely because real feedback is hard to get.
-
-===== PERSONA FILE =====
-${personaMd}
-===== END PERSONA FILE =====
-
-SESSION PROTOCOL
-The founder has submitted their pitch as the first user message. Run exactly
-this sequence, one assistant turn per round, waiting for the founder's answers
-between rounds:
-
-- Round 1 — "Clarifying" (phase: questions): 2 questions. Curious tone; map the
-  pitch onto your rubric and probe what's ambiguous.
-- Round 2 — "The rubric" (phase: questions): 3 questions. Your hardest attacks,
-  aimed at the rubric lines where the pitch (and the Round 1 answers) are
-  weakest. Apply your question style.
-- Round 3 — "Red flags" (phase: questions): 2 questions. Press the weakest
-  answers so far and any red flags you detected. Per your pass bar, an answer
-  that was fog gets re-pressed here.
-- After the founder answers Round 3 (phase: report): deliver the report.
-
-RETRY MODE
-If the founder later asks to retry their weakest answers, run one extra round
-("Retry", phase: questions) of up to 3 questions targeting exactly those
-weaknesses, then issue a fresh report that scores the retried areas on the new
-answers and says plainly what improved and what did not.
-
-OUTPUT CONTRACT
-Every turn must satisfy the JSON schema you are constrained to:
-- phase "questions": fill round_label and questions; report must be null.
-  commentary is 1-3 sentences of in-character reaction to what you just heard.
-- phase "report": questions must be an empty array. Scores: one entry per
-  rubric criterion, weight copied from the rubric, score 0-10 where 10 means
-  the answer fully met your pass bar. Weaknesses: the 2-3 answers that hurt
-  the founder most, quoted by gist, with why_it_hurt in your voice. Verdict:
-  2-4 sentences, in character, ending with whether you would take the next
-  meeting.${history}`;
-}
 
 // -------------------------------------------------------------- providers
 // All provider calls go through the local server (server.mjs), which holds
 // the API keys in its environment. The schema travels with the request so
 // the server stays a pass-through.
-const DEFAULT_MODELS = { anthropic: "claude-opus-5", openai: "gpt-5" };
 let serverConfig = { providers: {}, tts: false };
 
 async function loadConfig() {
@@ -161,7 +28,7 @@ async function loadConfig() {
     els.provider.value = available[0];
     els.model.value = DEFAULT_MODELS[available[0]];
   }
-  const found = [serverConfig.providers.anthropic && "Claude", serverConfig.providers.openai && "OpenAI"].filter(Boolean).join(" and ");
+  const found = Object.values(providers).filter((p) => serverConfig.providers[p.name]).map((p) => p.label).join(" and ");
   els.keyStatus.textContent = serverConfig.tts
     ? `Keys found in your shell env: ${found}. Spoken questions use OpenAI audio.`
     : `Keys found in your shell env: ${found}. Spoken questions fall back to the browser voice; set OPENAI_API_KEY for the real one.`;
@@ -600,7 +467,18 @@ els.clearHistory.addEventListener("click", () => {
   renderHistory();
 });
 
+function renderProviderOptions() {
+  els.provider.innerHTML = "";
+  for (const p of Object.values(providers)) {
+    const opt = document.createElement("option");
+    opt.value = p.name;
+    opt.textContent = p.label;
+    els.provider.appendChild(opt);
+  }
+}
+
 // ------------------------------------------------------------------- boot
+renderProviderOptions();
 restorePrefs();
 renderStages();
 renderHistory();

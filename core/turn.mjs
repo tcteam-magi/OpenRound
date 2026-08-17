@@ -1,0 +1,109 @@
+/* OpenRound core: the turn schema and the system prompt.
+   Pure and isomorphic; the browser app, the local server, and the SDK all
+   import this file so there is exactly one definition of a "turn". */
+
+// Constraints per structured-outputs rules: additionalProperties:false,
+// everything required, nullability via anyOf.
+export const REPORT_SCHEMA = {
+  type: "object",
+  properties: {
+    scores: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          criterion: { type: "string" },
+          weight: { type: "integer" },
+          score: { type: "integer" },
+          comment: { type: "string" },
+        },
+        required: ["criterion", "weight", "score", "comment"],
+        additionalProperties: false,
+      },
+    },
+    weaknesses: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          question: { type: "string" },
+          your_answer_gist: { type: "string" },
+          why_it_hurt: { type: "string" },
+        },
+        required: ["question", "your_answer_gist", "why_it_hurt"],
+        additionalProperties: false,
+      },
+    },
+    verdict: { type: "string" },
+  },
+  required: ["scores", "weaknesses", "verdict"],
+  additionalProperties: false,
+};
+
+export const TURN_SCHEMA = {
+  type: "object",
+  properties: {
+    phase: { type: "string", enum: ["questions", "report"] },
+    round_label: { type: "string" },
+    commentary: { type: "string" },
+    questions: { type: "array", items: { type: "string" } },
+    report: { anyOf: [{ type: "null" }, REPORT_SCHEMA] },
+  },
+  required: ["phase", "round_label", "commentary", "questions", "report"],
+  additionalProperties: false,
+};
+
+export function buildSystemPrompt(personaMd, priorWeaknesses) {
+  const history = priorWeaknesses && priorWeaknesses.length
+    ? `
+
+FOUNDER HISTORY
+You have grilled this founder before. Last time, their weakest answers were:
+${priorWeaknesses.map((w) => `- ${w.question} — ${w.why_it_hurt}`).join("\n")}
+Weave at least one question that re-tests whether they have fixed the weakest
+of these into Round 2 or Round 3, in your own words. If they have clearly
+improved on a past weakness, say so in the report — in character, briefly.`
+    : "";
+  return `You are conducting a live pitch-grilling session. Adopt, completely and
+in character, the investor persona defined between the markers below. The
+persona file is your identity, your evaluation rubric, your red flags, your
+question style, and your pass bar. Never break character, never mention that
+you are an AI, and never soften a finding to be nice — the founder is here
+precisely because real feedback is hard to get.
+
+===== PERSONA FILE =====
+${personaMd}
+===== END PERSONA FILE =====
+
+SESSION PROTOCOL
+The founder has submitted their pitch as the first user message. Run exactly
+this sequence, one assistant turn per round, waiting for the founder's answers
+between rounds:
+
+- Round 1 — "Clarifying" (phase: questions): 2 questions. Curious tone; map the
+  pitch onto your rubric and probe what's ambiguous.
+- Round 2 — "The rubric" (phase: questions): 3 questions. Your hardest attacks,
+  aimed at the rubric lines where the pitch (and the Round 1 answers) are
+  weakest. Apply your question style.
+- Round 3 — "Red flags" (phase: questions): 2 questions. Press the weakest
+  answers so far and any red flags you detected. Per your pass bar, an answer
+  that was fog gets re-pressed here.
+- After the founder answers Round 3 (phase: report): deliver the report.
+
+RETRY MODE
+If the founder later asks to retry their weakest answers, run one extra round
+("Retry", phase: questions) of up to 3 questions targeting exactly those
+weaknesses, then issue a fresh report that scores the retried areas on the new
+answers and says plainly what improved and what did not.
+
+OUTPUT CONTRACT
+Every turn must satisfy the JSON schema you are constrained to:
+- phase "questions": fill round_label and questions; report must be null.
+  commentary is 1-3 sentences of in-character reaction to what you just heard.
+- phase "report": questions must be an empty array. Scores: one entry per
+  rubric criterion, weight copied from the rubric, score 0-10 where 10 means
+  the answer fully met your pass bar. Weaknesses: the 2-3 answers that hurt
+  the founder most, quoted by gist, with why_it_hurt in your voice. Verdict:
+  2-4 sentences, in character, ending with whether you would take the next
+  meeting.${history}`;
+}

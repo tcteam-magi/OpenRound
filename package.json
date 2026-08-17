@@ -1,0 +1,23 @@
+{
+  "name": "openround",
+  "version": "0.2.0",
+  "description": "Get grilled by a stage-native AI investor persona before it counts. Web app and SDK.",
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./providers": "./providers/index.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["pitch", "founder", "practice", "llm", "investor", "grilling"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tcteam-magi/OpenRound.git"
+  }
+}

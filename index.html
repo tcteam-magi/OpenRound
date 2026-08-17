@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenRound</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Open<em>Round</em></h1>
+      <p class="tag">Get grilled by the investor you're actually going to face — before it counts.</p>
+    </header>
+
+    <!-- 1. provider & key -->
+    <section class="panel" id="panel-key">
+      <h2><span class="step">1</span>Bring your own key</h2>
+      <div class="row">
+        <div>
+          <label for="provider">Provider</label>
+          <select id="provider">
+            <option value="anthropic" selected>Anthropic (Claude)</option>
+            <option value="openai">OpenAI</option>
+          </select>
+        </div>
+        <div>
+          <label for="model">Model</label>
+          <input type="text" id="model" value="claude-opus-5" />
+        </div>
+        <div>
+          <label for="apikey">API key</label>
+          <input type="password" id="apikey" placeholder="sk-..." autocomplete="off" />
+        </div>
+      </div>
+      <p class="hint">Your key lives in this browser's localStorage and is sent only to the provider you chose. No server, no middleman — this page is static.</p>
+    </section>
+
+    <!-- 2. stage -->
+    <section class="panel" id="panel-stage">
+      <h2><span class="step">2</span>Pick your stage</h2>
+      <div class="stages" id="stages"></div>
+    </section>
+
+    <!-- 3. pitch -->
+    <section class="panel" id="panel-pitch">
+      <h2><span class="step">3</span>Your pitch</h2>
+      <textarea id="pitch" placeholder="Paste your pitch script, speaker notes, or a text summary of your deck. The more real numbers and claims it contains, the better the grilling."></textarea>
+      <button class="primary" id="start">Enter the room</button>
+      <div id="setup-error"></div>
+    </section>
+
+    <!-- 4. session -->
+    <section class="panel" id="panel-session" hidden>
+      <h2><span class="step">4</span>The grilling</h2>
+      <div id="transcript"></div>
+      <div id="answer-box" hidden>
+        <label for="answer">Your answer</label>
+        <textarea id="answer" placeholder="Answer the questions above. Numbered answers are fine."></textarea>
+        <button class="primary" id="send">Answer</button>
+      </div>
+      <div id="session-error"></div>
+    </section>
+
+    <!-- 5. report -->
+    <section class="panel" id="panel-report" hidden>
+      <h2><span class="step">5</span>The verdict</h2>
+      <div id="report"></div>
+      <div class="report-actions">
+        <button class="primary" id="retry" hidden>Retry my weakest answers</button>
+        <button class="ghost" id="restart">New session</button>
+      </div>
+    </section>
+
+    <footer>
+      <p>Personas are archetypes, not real investors — see <a href="PERSONA_FORMAT.md">PERSONA_FORMAT.md</a> to contribute one. MIT licensed.</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -179,7 +179,7 @@ async function enterRoom(stage, chain) {
   els.answer.value = chain ? chain.pitch : "";
   els.answer.placeholder = "Your pitch. Paste it, attach a deck, or just talk…";
   autogrow();
-  els.answer.focus();
+  els.answer.focus({ preventScroll: true });
   els.deckStatus.textContent = chain
     ? "Same pitch, pre-filled. Tighten it if you learned something downstairs, then send."
     : "";
@@ -196,6 +196,15 @@ function leaveRoom() {
 els.leave.addEventListener("click", leaveRoom);
 
 // -------------------------------------------------------------- rendering
+// The transcript pane is the only scroller in the room; the window never moves.
+const SMOOTH = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+function scrollTranscript(el) {
+  els.transcript.scrollTo({
+    top: el ? el.offsetTop - 12 : els.transcript.scrollHeight,
+    behavior: SMOOTH,
+  });
+}
+
 function addOpenerTurn(text) {
   const div = document.createElement("div");
   div.className = "turn investor";
@@ -209,7 +218,7 @@ function addFounderTurn(text) {
   div.className = "turn founder";
   div.innerHTML = `<div class="who">You</div><div class="bubble">${esc(text)}</div>`;
   els.transcript.appendChild(div);
-  div.scrollIntoView({ behavior: "smooth", block: "end" });
+  scrollTranscript();
 }
 
 function addInvestorTurn(turn) {
@@ -231,7 +240,7 @@ function addInvestorTurn(turn) {
       ${qs ? `<ol>${qs}</ol>` : ""}
     </div>`;
   els.transcript.appendChild(div);
-  div.scrollIntoView({ behavior: "smooth", block: "end" });
+  scrollTranscript(marker); // long replies read from the top, not the bottom
 }
 
 function addThinking() {
@@ -240,7 +249,7 @@ function addThinking() {
   div.id = "thinking";
   div.textContent = `${state.stage.who} is weighing you`;
   els.transcript.appendChild(div);
-  div.scrollIntoView({ behavior: "smooth", block: "end" });
+  scrollTranscript();
 }
 function removeThinking() {
   const t = $("thinking");
@@ -279,7 +288,7 @@ function renderReport(report) {
   els.transcript.appendChild(card);
   saveSessionToHistory(report, total);
   renderMoment(report, total);
-  card.scrollIntoView({ behavior: "smooth", block: "start" });
+  scrollTranscript(card);
 }
 
 // The moment after the verdict: an intro upstairs, a close, or the door.
@@ -354,7 +363,7 @@ async function investorTurn() {
     } else {
       addInvestorTurn(turn);
       els.answer.placeholder = "Answer the room…";
-      els.answer.focus();
+      els.answer.focus({ preventScroll: true });
       speak([turn.commentary, ...turn.questions.map((q, i) => `Question ${i + 1}. ${q}`)]);
     }
   } catch (e) {
@@ -395,8 +404,13 @@ els.answer.addEventListener("keydown", (e) => {
   }
 });
 function autogrow() {
+  // Resizing the composer shrinks the transcript pane; keep it pinned to the
+  // bottom if the reader was already there, so typing never shifts the view.
+  const t = els.transcript;
+  const pinned = t.scrollHeight - t.scrollTop - t.clientHeight < 80;
   els.answer.style.height = "auto";
   els.answer.style.height = `${Math.min(els.answer.scrollHeight, 192)}px`;
+  if (pinned) t.scrollTop = t.scrollHeight;
 }
 els.answer.addEventListener("input", autogrow);
 

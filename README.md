@@ -2,6 +2,8 @@
 
 > **Everyone is a founder. Everyone has to pitch. Almost nobody gets grilled before it counts.**
 
+**Live demo: [tcteam-magi.github.io/OpenRound](https://tcteam-magi.github.io/OpenRound/)** — bring your own API key, nothing else to set up.
+
 The night before demo day, what a founder needs is not encouragement — it's a hostile Q&A. `OpenRound` is an open-source web app where an AI investor persona grills your pitch the way a real one would, then scores you against the rubric that stage of investor actually uses.
 
 **Stage-native, not generic.** A pre-seed angel, a seed VC, and a Series A partner are not the same person with different moods — they grill entirely different things:

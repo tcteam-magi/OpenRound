@@ -68,6 +68,8 @@ select:focus, input:focus, textarea:focus { outline: 1px solid var(--ember-dim);
 input[type="password"], input[type="text"] { min-width: 260px; }
 .hint { font-size: 0.8rem; color: var(--paper-dim); margin-top: 0.5rem; }
 .hint a { color: var(--paper-dim); }
+.hint code { color: var(--paper); background: var(--ink-2); padding: 0.05rem 0.3rem; border-radius: 3px; }
+.error-inline { color: #f0a48c; }
 
 /* ---------- stage cards ---------- */
 .stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }

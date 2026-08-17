@@ -1,56 +1,64 @@
 # OpenRound
 
-> **Everyone is a founder. Everyone has to pitch. Almost nobody gets grilled before it counts.**
+> Everyone is a founder. Everyone has to pitch. Almost nobody gets grilled before it counts.
 
-**Live demo: [tcteam-magi.github.io/OpenRound](https://tcteam-magi.github.io/OpenRound/)** — bring your own API key, nothing else to set up.
+The night before demo day, encouragement is cheap. What you actually need is a hostile Q&A. OpenRound is an open-source web app where an AI investor persona grills your pitch, presses your weak answers, and scores you against the rubric that stage of investor really uses.
 
-The night before demo day, what a founder needs is not encouragement — it's a hostile Q&A. `OpenRound` is an open-source web app where an AI investor persona grills your pitch the way a real one would, then scores you against the rubric that stage of investor actually uses.
+It runs on your machine. Your API keys stay in your shell environment, requests go from localhost straight to the model provider, and nothing sits in between.
 
-**Stage-native, not generic.** A pre-seed angel, a seed VC, and a Series A partner are not the same person with different moods — they grill entirely different things:
+## Pick your stage
+
+A pre-seed angel, a seed VC, and a Series A partner grill different things:
 
 | Stage | Persona | Grills you on | Doesn't care about |
 |---|---|---|---|
-| **Pre-seed** | Angel | Founder-market fit, size of the vision, the core hypothesis | Numbers (you barely have any) |
-| **Seed** | Seed VC | What your traction *means*, ICP clarity, GTM hypothesis, why now | Polished unit economics |
-| **Series A** | Metrics partner | ARR growth, retention curves, burn multiple, the scale story | Vision speeches (numbers replace them) |
+| Pre-seed | Angel | Founder-market fit, size of the vision, the core hypothesis | Numbers (you barely have any) |
+| Seed | Seed VC | What your traction means, ICP clarity, GTM hypothesis, why now | Polished unit economics |
+| Series A | Metrics partner | ARR growth, retention curves, burn multiple, the scale story | Vision speeches (numbers replace them) |
 
 ## How a session works
 
-1. **Pick your stage** — that decides who walks into the room.
-2. **Paste your pitch** — script, notes, or a deck summary.
-3. **Get grilled** — three rounds: clarifying questions, then core-rubric attacks, then red-flag follow-ups. Weak answers get pressed.
-4. **Get the report** — rubric scores, your weakest answers, and a verdict. Then hit **"Retry my weakest answers"** and face them again.
+1. Pick your stage. That decides who walks into the room.
+2. Paste your pitch, or upload a deck (pdf, pptx, docx, txt, md). Your browser parses the file locally; it never leaves your machine. Scanned or image-only decks won't extract, so paste text for those.
+3. Get grilled through three rounds: clarifying questions, then attacks on your weakest rubric lines, then follow-ups on the red flags you exposed. A foggy answer gets pressed again.
+4. Read the report: rubric scores, the answers that hurt you most, and a verdict. Then hit "Retry my weakest answers" and face them again.
 
-## Quickstart
+## Run it
 
-No build step, no backend. Serve the folder statically:
+You need Node 18 or newer, plus an API key for Claude or OpenAI.
 
 ```bash
-npx serve .        # or: python3 -m http.server
+git clone https://github.com/tcteam-magi/OpenRound.git
+cd OpenRound
+
+export ANTHROPIC_API_KEY=sk-ant-...   # for Claude
+export OPENAI_API_KEY=sk-...          # for OpenAI, and for spoken questions
+
+node server.mjs
+# OpenRound → http://127.0.0.1:3131
 ```
 
-Open the page, paste your API key (Claude or OpenAI — **BYOK**, stored only in your browser's localStorage, sent only to the provider you chose), pick a stage, and pitch.
+The server binds to 127.0.0.1 only, so nothing is reachable from outside your machine. It reads your keys once at startup and signs provider requests itself. The page in your browser never sees a key, and stores nothing beyond your provider and model preference.
+
+## Voice
+
+Turn on Voice in the grilling room and the investor asks questions out loud. With `OPENAI_API_KEY` set, the audio comes from OpenAI's speech model. Without it, the app falls back to your browser's built-in voice, which works but sounds robotic. The Speak button dictates your answers through the Web Speech API; Chrome handles this best, and the button hides itself where the API is missing.
+
+## Session history
+
+Every report is saved to your browser's localStorage (the last thirty). A "Past grillings" panel tracks your scores per stage over time. When you face the same stage again, the investor remembers your weakest answers from last time and re-tests at least one of them. Get grilled, fix it, come back, prove it.
 
 ## Personas are an open format
 
-Each investor lives in a plain markdown file under [`personas/`](personas/) — identity, rubric weights, red flags, question style, pass bar. The format is documented in [`PERSONA_FORMAT.md`](PERSONA_FORMAT.md).
+Each investor is one markdown file in [`personas/`](personas/): identity, rubric weights, red flags, question style, pass bar. The format is documented in [`PERSONA_FORMAT.md`](PERSONA_FORMAT.md). If the investors in your region or sector ask differently, write that persona and open a PR. Personas are archetypes built from public knowledge about how each stage evaluates; no real investor is imitated.
 
-Think your region's or sector's investors ask differently? **Write that persona and open a PR.** No real investors are impersonated — personas are archetypes built from public knowledge about how each stage evaluates.
+## Not here yet
 
-## Beyond the basics
-
-- **Deck upload** — drop a `.pdf`, `.pptx`, `.docx`, `.txt`, or `.md` on the pitch box (or use the upload button). It's parsed **in your browser** — pdf.js and JSZip are lazy-loaded from a CDN, and the file itself never leaves the page. The extracted text lands in the pitch box for you to review and edit before entering the room. Scanned or image-only decks won't extract; paste text for those.
-- **Voice mode** — toggle **Voice** in the grilling room and the investor asks their questions out loud (browser speech synthesis). The **Speak** button dictates your answer via the Web Speech API — works best in Chrome, and hides itself where unsupported. No extra keys, no audio leaves your machine except to your browser's own speech service.
-- **Session history** — every report is saved to this browser's localStorage (last 30). The **Past grillings** panel tracks your scores per stage over time, and when you face the same stage again, **the investor remembers your weakest answers and re-tests at least one**. That's the practice loop: get grilled, fix it, come back, prove it.
-
-## What this is not (yet)
-
-- **No cloud sync** — history lives in one browser's localStorage.
-- **No nuanced voice** — browser TTS is what it is; a provider-quality voice mode is planned.
+History doesn't sync between browsers. And there is no hosted version, on purpose: the point is that your keys and your pitch stay on your machine.
 
 ## Acknowledgements
 
-The client-side pptx/docx parsing approach (which OOXML parts are the source of truth, text-fidelity rules) adapts [genoffice](https://github.com/genspark-ai/genoffice)'s `file-parse` package (Apache-2.0), reimplemented for the browser on DOMParser.
+The pptx and docx parsing approach (which OOXML parts to read, how to keep the text faithful) comes from [genoffice](https://github.com/genspark-ai/genoffice)'s `file-parse` package (Apache-2.0), rebuilt for the browser on DOMParser.
 
 ## License
 

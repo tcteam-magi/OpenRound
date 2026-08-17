@@ -10,12 +10,12 @@
   <div class="wrap">
     <header>
       <h1>Open<em>Round</em></h1>
-      <p class="tag">Get grilled by the investor you're actually going to face — before it counts.</p>
+      <p class="tag">Get grilled by the investor you're going to face, before it counts.</p>
     </header>
 
-    <!-- 1. provider & key -->
+    <!-- 1. provider -->
     <section class="panel" id="panel-key">
-      <h2><span class="step">1</span>Bring your own key</h2>
+      <h2><span class="step">1</span>Setup</h2>
       <div class="row">
         <div>
           <label for="provider">Provider</label>
@@ -28,12 +28,9 @@
           <label for="model">Model</label>
           <input type="text" id="model" value="claude-opus-5" />
         </div>
-        <div>
-          <label for="apikey">API key</label>
-          <input type="password" id="apikey" placeholder="sk-..." autocomplete="off" />
-        </div>
       </div>
-      <p class="hint">Your key lives in this browser's localStorage and is sent only to the provider you chose. No server, no middleman — this page is static.</p>
+      <p class="hint" id="key-status">Checking the local server for keys…</p>
+      <p class="hint">API keys stay in your shell environment. The local server reads them at startup and calls the provider from your machine; this page never sees or stores a key.</p>
     </section>
 
     <!-- 2. stage -->
@@ -48,9 +45,9 @@
       <div class="upload-row">
         <label class="upload-btn" for="deck">Upload deck</label>
         <input type="file" id="deck" accept=".pdf,.pptx,.docx,.txt,.md" hidden />
-        <span class="upload-status" id="deck-status">pdf · pptx · docx · txt — parsed in your browser, the file never leaves this page. Or just drop it on the box below.</span>
+        <span class="upload-status" id="deck-status">pdf, pptx, docx, txt. Parsed in your browser; the file never leaves your machine. You can also drop it on the box below.</span>
       </div>
-      <textarea id="pitch" placeholder="Paste your pitch script, speaker notes, or a text summary of your deck — or upload/drop a deck above. The more real numbers and claims it contains, the better the grilling."></textarea>
+      <textarea id="pitch" placeholder="Paste your pitch script, speaker notes, or a text summary of your deck, or upload one above. The more real numbers and claims it contains, the better the grilling."></textarea>
       <button class="primary" id="start">Enter the room</button>
       <div id="setup-error"></div>
     </section>
@@ -85,13 +82,13 @@
     <!-- 6. history -->
     <section class="panel" id="panel-history" hidden>
       <h2><span class="step">&#8734;</span>Past grillings</h2>
-      <p class="hint">Saved in this browser's localStorage. When you face the same stage again, the investor remembers your weakest answers — and re-tests them.</p>
+      <p class="hint">Saved in this browser's localStorage. When you face the same stage again, the investor remembers your weakest answers and re-tests them.</p>
       <div id="history"></div>
       <button class="ghost" id="clear-history">Clear history</button>
     </section>
 
     <footer>
-      <p>Personas are archetypes, not real investors — see <a href="PERSONA_FORMAT.md">PERSONA_FORMAT.md</a> to contribute one. MIT licensed.</p>
+      <p>Personas are archetypes, not real investors. See <a href="PERSONA_FORMAT.md">PERSONA_FORMAT.md</a> to contribute one. MIT licensed.</p>
     </footer>
   </div>
 

@@ -139,75 +139,51 @@ Every turn must satisfy the JSON schema you are constrained to:
 }
 
 // -------------------------------------------------------------- providers
-async function callAnthropic({ key, model, system, messages }) {
-  const body = {
-    model,
-    max_tokens: 16000,
-    fallbacks: "default",
-    system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-    messages,
-    output_config: { format: { type: "json_schema", schema: TURN_SCHEMA } },
-  };
-  const doFetch = (payload, beta) =>
-    fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-        ...(beta ? { "anthropic-beta": "server-side-fallback-2026-07-01" } : {}),
-      },
-      body: JSON.stringify(payload),
-    });
+// All provider calls go through the local server (server.mjs), which holds
+// the API keys in its environment. The schema travels with the request so
+// the server stays a pass-through.
+const DEFAULT_MODELS = { anthropic: "claude-opus-5", openai: "gpt-5" };
+let serverConfig = { providers: {}, tts: false };
 
-  let resp = await doFetch(body, true);
-  if (resp.status === 400) {
-    // Fallbacks are beta; if this org/route rejects them, retry without.
-    const { fallbacks, ...withoutFallbacks } = body;
-    resp = await doFetch(withoutFallbacks, false);
+async function loadConfig() {
+  try {
+    serverConfig = await (await fetch("/api/config")).json();
+  } catch {
+    serverConfig = { providers: {}, tts: false };
   }
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Anthropic API error (${resp.status})`);
+  const available = Object.keys(DEFAULT_MODELS).filter((p) => serverConfig.providers[p]);
+  for (const opt of els.provider.options) opt.disabled = !serverConfig.providers[opt.value];
+  if (!available.length) {
+    els.keyStatus.innerHTML = `<span class="error-inline">No API keys found. Stop the server, run <code>export ANTHROPIC_API_KEY=...</code> (or <code>OPENAI_API_KEY=...</code>), then <code>node server.mjs</code> again.</span>`;
+    return;
   }
-  const data = await resp.json();
-  if (data.stop_reason === "refusal") {
-    throw new Error("The model declined this request (safety refusal). Rephrase your pitch content and try again.");
+  if (!serverConfig.providers[els.provider.value]) {
+    els.provider.value = available[0];
+    els.model.value = DEFAULT_MODELS[available[0]];
   }
-  const text = data.content.find((b) => b.type === "text");
-  if (!text) throw new Error("Empty response from model.");
-  return JSON.parse(text.text);
+  const found = [serverConfig.providers.anthropic && "Claude", serverConfig.providers.openai && "OpenAI"].filter(Boolean).join(" and ");
+  els.keyStatus.textContent = serverConfig.tts
+    ? `Keys found in your shell env: ${found}. Spoken questions use OpenAI audio.`
+    : `Keys found in your shell env: ${found}. Spoken questions fall back to the browser voice; set OPENAI_API_KEY for the real one.`;
 }
 
-async function callOpenAI({ key, model, system, messages }) {
-  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+async function callProvider({ model, system, messages }) {
+  const resp = await fetch("/api/chat", {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${key}`,
-    },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({
+      provider: els.provider.value,
       model,
-      messages: [{ role: "system", content: system }, ...messages],
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "grilling_turn", strict: true, schema: TURN_SCHEMA },
-      },
+      system,
+      messages,
+      schema: TURN_SCHEMA,
     }),
   });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error?.message || `OpenAI API error (${resp.status})`);
-  }
-  const data = await resp.json();
-  return JSON.parse(data.choices[0].message.content);
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || `Server error (${resp.status})`);
+  return data.turn;
 }
 
-const PROVIDERS = {
-  anthropic: { call: callAnthropic, defaultModel: "claude-opus-5" },
-  openai: { call: callOpenAI, defaultModel: "gpt-5" },
-};
 
 // ------------------------------------------------------------------ state
 const state = {
@@ -222,7 +198,7 @@ const state = {
 // --------------------------------------------------------------- elements
 const $ = (id) => document.getElementById(id);
 const els = {
-  provider: $("provider"), model: $("model"), apikey: $("apikey"),
+  provider: $("provider"), model: $("model"), keyStatus: $("key-status"),
   stages: $("stages"), pitch: $("pitch"), start: $("start"),
   setupError: $("setup-error"),
   panelSession: $("panel-session"), transcript: $("transcript"),
@@ -237,21 +213,20 @@ const els = {
 
 // ------------------------------------------------------------------ setup
 function restorePrefs() {
+  localStorage.removeItem("pg.key"); // keys no longer touch the browser
   const p = localStorage.getItem("pg.provider");
-  if (p && PROVIDERS[p]) els.provider.value = p;
-  els.model.value = localStorage.getItem("pg.model") || PROVIDERS[els.provider.value].defaultModel;
-  els.apikey.value = localStorage.getItem("pg.key") || "";
+  if (p && p in DEFAULT_MODELS) els.provider.value = p;
+  els.model.value = localStorage.getItem("pg.model") || DEFAULT_MODELS[els.provider.value];
 }
 
 els.provider.addEventListener("change", () => {
-  els.model.value = PROVIDERS[els.provider.value].defaultModel;
+  els.model.value = DEFAULT_MODELS[els.provider.value];
   savePrefs();
 });
-[els.model, els.apikey].forEach((el) => el.addEventListener("change", savePrefs));
+els.model.addEventListener("change", savePrefs);
 function savePrefs() {
   localStorage.setItem("pg.provider", els.provider.value);
   localStorage.setItem("pg.model", els.model.value);
-  localStorage.setItem("pg.key", els.apikey.value);
 }
 
 function renderStages() {
@@ -349,15 +324,13 @@ function renderReport(report) {
 
 // ---------------------------------------------------------------- session
 async function investorTurn() {
-  const provider = PROVIDERS[els.provider.value];
   state.busy = true;
   els.send.disabled = true;
   els.start.disabled = true;
   els.sessionError.innerHTML = "";
   addThinking();
   try {
-    const turn = await provider.call({
-      key: els.apikey.value.trim(),
+    const turn = await callProvider({
       model: els.model.value.trim(),
       system: state.system,
       messages: state.messages,
@@ -391,7 +364,9 @@ async function investorTurn() {
 els.start.addEventListener("click", async () => {
   els.setupError.innerHTML = "";
   const problems = [];
-  if (!els.apikey.value.trim()) problems.push("an API key");
+  if (!serverConfig.providers[els.provider.value]) {
+    problems.push(`an ${els.provider.value === "openai" ? "OPENAI" : "ANTHROPIC"}_API_KEY in the server's environment`);
+  }
   if (!state.stage) problems.push("a stage");
   if (!els.pitch.value.trim()) problems.push("your pitch");
   if (problems.length) {
@@ -484,20 +459,48 @@ els.pitch.addEventListener("drop", (e) => {
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 const voice = { on: false, rec: null, listening: false };
 
-function speak(parts) {
-  if (!voice.on || !("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(parts.filter(Boolean).join(" … "));
-  u.lang = "en-US";
-  u.rate = 1.02;
-  speechSynthesis.speak(u);
+let currentAudio = null;
+function stopSpeaking() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+
+async function speak(parts) {
+  if (!voice.on) return;
+  stopSpeaking();
+  const text = parts.filter(Boolean).join(" ... ");
+  if (serverConfig.tts) {
+    try {
+      const resp = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (resp.ok) {
+        currentAudio = new Audio(URL.createObjectURL(await resp.blob()));
+        currentAudio.play();
+        return;
+      }
+    } catch {
+      // fall through to the browser voice
+    }
+  }
+  if ("speechSynthesis" in window) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-US";
+    u.rate = 1.02;
+    speechSynthesis.speak(u);
+  }
 }
 
 els.voiceToggle.addEventListener("click", () => {
   voice.on = !voice.on;
   els.voiceToggle.textContent = voice.on ? "Voice: on" : "Voice: off";
   els.voiceToggle.classList.toggle("on", voice.on);
-  if (!voice.on && "speechSynthesis" in window) speechSynthesis.cancel();
+  if (!voice.on) stopSpeaking();
 });
 
 function stopListening() {
@@ -510,7 +513,7 @@ function stopListening() {
 els.mic.addEventListener("click", () => {
   if (!SpeechRec) return;
   if (voice.listening) return stopListening();
-  if ("speechSynthesis" in window) speechSynthesis.cancel(); // barge-in
+  stopSpeaking(); // barge-in: the founder talking shuts the investor up
   voice.rec = new SpeechRec();
   voice.rec.lang = "en-US";
   voice.rec.continuous = true;
@@ -601,3 +604,4 @@ els.clearHistory.addEventListener("click", () => {
 restorePrefs();
 renderStages();
 renderHistory();
+loadConfig();

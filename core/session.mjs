@@ -33,14 +33,17 @@ export class GrillingSession {
    * @param {string} [opts.apiKey]  Falls back to the provider's env var.
    * @param {Array}  [opts.priorWeaknesses]  Weaknesses from a past report; the
    *   investor will re-test at least one.
+   * @param {string} [opts.warmIntro]  One sentence of who vouched for the
+   *   founder; the investor references it and raises the bar.
    */
-  constructor({ model, stage = "seed", personaMarkdown, apiKey, priorWeaknesses } = {}) {
+  constructor({ model, stage = "seed", personaMarkdown, apiKey, priorWeaknesses, warmIntro } = {}) {
     const { provider, model: modelId } = resolveModel(model || "anthropic");
     this.provider = provider;
     this.model = modelId;
     this.stage = personaMarkdown ? null : getStage(stage);
     this.personaMarkdown = personaMarkdown || null;
     this.priorWeaknesses = priorWeaknesses || null;
+    this.warmIntro = warmIntro || null;
     this.apiKey = apiKey || process.env[provider.envKey] || "";
     this.messages = [];
     this.lastTurn = null;
@@ -56,7 +59,7 @@ export class GrillingSession {
     if (!this.personaMarkdown) {
       this.personaMarkdown = await readFile(join(ROOT, this.stage.file), "utf-8");
     }
-    this.system = buildSystemPrompt(this.personaMarkdown, this.priorWeaknesses);
+    this.system = buildSystemPrompt(this.personaMarkdown, this.priorWeaknesses, this.warmIntro);
     this.messages.push({ role: "user", content: `MY PITCH:\n\n${pitch.trim()}` });
     return this.#turn();
   }

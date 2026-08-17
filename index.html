@@ -4,89 +4,86 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OpenRound</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Open<em>Round</em></h1>
-      <p class="tag">Get grilled by the investor you're going to face, before it counts.</p>
+
+  <!-- ═══════════════ THE LOBBY ═══════════════ -->
+  <div id="scene-lobby" class="scene">
+    <div class="lobby-inner">
+      <header class="brand">OPENROUND</header>
+
+      <h1 class="lobby-title">Take the<br /><em>meeting.</em></h1>
+      <p class="lobby-sub">An investor is waiting on the other side of one of these doors. They speak first. Answer well and they'll walk you upstairs to the next one.</p>
+
+      <div id="stages" class="doors" role="list"></div>
+
+      <p class="hint" id="key-status">Checking the local server for keys…</p>
+
+      <section id="panel-history" hidden>
+        <h2 class="mono-heading">Past meetings</h2>
+        <div id="history"></div>
+        <button class="mono-btn" id="clear-history">Clear history</button>
+      </section>
+
+      <footer class="lobby-foot">
+        <button class="mono-btn" id="open-settings">Settings</button>
+        <span class="foot-note">Keys stay in your shell env. Personas are archetypes, not real investors. <a href="PERSONA_FORMAT.md">Write one.</a> MIT.</span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ═══════════════ THE ROOM ═══════════════ -->
+  <div id="scene-room" class="scene" hidden>
+    <header class="room-head">
+      <button class="mono-btn" id="leave">← Leave</button>
+      <div class="room-who">
+        <span id="room-name">The Angel</span>
+        <span id="room-tag" class="room-tag" hidden>warm intro</span>
+      </div>
+      <button class="mono-btn" id="voice-toggle" aria-pressed="false">Voice off</button>
     </header>
 
-    <!-- 1. provider -->
-    <section class="panel" id="panel-key">
-      <h2><span class="step">1</span>Setup</h2>
-      <div class="row">
-        <div>
-          <label for="provider">Provider</label>
-          <select id="provider"></select>
-        </div>
-        <div>
-          <label for="model">Model</label>
-          <input type="text" id="model" value="claude-opus-5" />
-        </div>
-      </div>
-      <p class="hint" id="key-status">Checking the local server for keys…</p>
-      <p class="hint">API keys stay in your shell environment. The local server reads them at startup and calls the provider from your machine; this page never sees or stores a key.</p>
-    </section>
+    <main id="transcript" aria-live="polite"></main>
+    <div id="session-error" class="error-slot"></div>
 
-    <!-- 2. stage -->
-    <section class="panel" id="panel-stage">
-      <h2><span class="step">2</span>Pick your stage</h2>
-      <div class="stages" id="stages"></div>
-    </section>
-
-    <!-- 3. pitch -->
-    <section class="panel" id="panel-pitch">
-      <h2><span class="step">3</span>Your pitch</h2>
-      <div class="upload-row">
-        <label class="upload-btn" for="deck">Upload deck</label>
+    <footer class="composer-wrap">
+      <p class="hint composer-hint" id="deck-status"></p>
+      <div class="composer">
         <input type="file" id="deck" accept=".pdf,.pptx,.docx,.txt,.md" hidden />
-        <span class="upload-status" id="deck-status">pdf, pptx, docx, txt. Parsed in your browser; the file never leaves your machine. You can also drop it on the box below.</span>
+        <button class="icon-btn" id="attach" aria-label="Attach a deck (pdf, pptx, docx, txt, md) — parsed in your browser" title="Attach a deck — parsed in your browser, never uploaded">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 12.5l-8.5 8.5a6 6 0 0 1-8.5-8.5L12.5 4a4 4 0 0 1 5.7 5.7L9.7 18.2a2 2 0 0 1-2.9-2.9l7.8-7.8"/></svg>
+        </button>
+        <textarea id="answer" rows="1" placeholder="Answer the room…" aria-label="Your answer"></textarea>
+        <button class="icon-btn" id="mic" hidden aria-label="Dictate your answer" title="Dictate (Web Speech)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+        <button class="icon-btn send" id="send" aria-label="Send your answer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+        </button>
       </div>
-      <textarea id="pitch" placeholder="Paste your pitch script, speaker notes, or a text summary of your deck, or upload one above. The more real numbers and claims it contains, the better the grilling."></textarea>
-      <button class="primary" id="start">Enter the room</button>
-      <div id="setup-error"></div>
-    </section>
-
-    <!-- 4. session -->
-    <section class="panel" id="panel-session" hidden>
-      <h2><span class="step">4</span>The grilling
-        <button class="ghost mini" id="voice-toggle" title="Read questions aloud (browser speech synthesis)">Voice: off</button>
-      </h2>
-      <div id="transcript"></div>
-      <div id="answer-box" hidden>
-        <label for="answer">Your answer</label>
-        <textarea id="answer" placeholder="Answer the questions above. Numbered answers are fine."></textarea>
-        <div class="row">
-          <button class="primary" id="send">Answer</button>
-          <button class="ghost" id="mic" hidden>&#127908; Speak</button>
-        </div>
-      </div>
-      <div id="session-error"></div>
-    </section>
-
-    <!-- 5. report -->
-    <section class="panel" id="panel-report" hidden>
-      <h2><span class="step">5</span>The verdict</h2>
-      <div id="report"></div>
-      <div class="report-actions">
-        <button class="primary" id="retry" hidden>Retry my weakest answers</button>
-        <button class="ghost" id="restart">New session</button>
-      </div>
-    </section>
-
-    <!-- 6. history -->
-    <section class="panel" id="panel-history" hidden>
-      <h2><span class="step">&#8734;</span>Past grillings</h2>
-      <p class="hint">Saved in this browser's localStorage. When you face the same stage again, the investor remembers your weakest answers and re-tests them.</p>
-      <div id="history"></div>
-      <button class="ghost" id="clear-history">Clear history</button>
-    </section>
-
-    <footer>
-      <p>Personas are archetypes, not real investors. See <a href="PERSONA_FORMAT.md">PERSONA_FORMAT.md</a> to contribute one. MIT licensed.</p>
+      <p class="composer-note">Enter sends · Shift+Enter for a new line</p>
     </footer>
+  </div>
+
+  <!-- ═══════════════ SETTINGS ═══════════════ -->
+  <div id="settings" class="drawer" hidden>
+    <div class="drawer-card">
+      <h2 class="mono-heading">Settings</h2>
+      <div class="drawer-row">
+        <label for="provider">Provider</label>
+        <select id="provider"></select>
+      </div>
+      <div class="drawer-row">
+        <label for="model">Model</label>
+        <input type="text" id="model" />
+      </div>
+      <p class="hint">API keys stay in your shell environment. The local server reads them at startup; this page never sees or stores a key.</p>
+      <button class="mono-btn" id="close-settings">Close</button>
+    </div>
   </div>
 
   <script src="parse.js"></script>

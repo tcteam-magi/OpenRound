@@ -67,7 +67,15 @@ export const TURN_SCHEMA = {
   additionalProperties: false,
 };
 
-export function buildSystemPrompt(personaMd, priorWeaknesses) {
+export function buildSystemPrompt(personaMd, priorWeaknesses, warmIntro) {
+  const intro = warmIntro
+    ? `
+
+WARM INTRO
+${warmIntro} A warm intro raises your expectations rather than lowering them.
+Acknowledge the introduction naturally in your first commentary, then grill
+exactly as you always do.`
+    : "";
   const history = priorWeaknesses && priorWeaknesses.length
     ? `
 
@@ -90,9 +98,10 @@ ${personaMd}
 ===== END PERSONA FILE =====
 
 SESSION PROTOCOL
-The founder has submitted their pitch as the first user message. Run exactly
-this sequence, one assistant turn per round, waiting for the founder's answers
-between rounds:
+You have already opened the meeting by asking the founder what they are
+raising; their first message is the answer. Do not introduce yourself again.
+Run exactly this sequence, one assistant turn per round, waiting for the
+founder's answers between rounds:
 
 - Round 1 — "Clarifying" (phase: questions): 2 questions. Curious tone; map the
   pitch onto your rubric and probe what's ambiguous.
@@ -132,5 +141,5 @@ Every turn must satisfy the JSON schema you are constrained to:
   cannot score above 3, and dodged questions belong in weaknesses. Weaknesses:
   the 2-3 answers that hurt the founder most, quoted by gist, with why_it_hurt
   in your voice. Verdict: 2-4 sentences, in character, ending with whether you
-  would take the next meeting.${history}`;
+  would take the next meeting.${intro}${history}`;
 }

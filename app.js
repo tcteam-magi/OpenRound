@@ -1,15 +1,17 @@
-/* OpenRound web app (a module). The turn schema, system prompt, stages,
-   and provider registry live in core/ and providers/, shared with the SDK. */
+/* OpenRound web app (a module): the meeting.
+   Two scenes. The lobby is where you pick a door; the room is where an
+   investor speaks first, grades every answer, and, if you clear their bar,
+   walks you upstairs to the next one. The turn schema, system prompt,
+   stages (with the meeting script), and provider registry live in core/
+   and providers/, shared with the SDK. */
 
 import { TURN_SCHEMA, buildSystemPrompt } from "./core/turn.mjs";
 import { STAGES } from "./core/stages.mjs";
 import { providers, DEFAULT_MODELS } from "./providers/index.mjs";
 
+const INTRO_BAR = 60; // weighted score needed to earn the intro upstairs
 
 // -------------------------------------------------------------- providers
-// All provider calls go through the local server (server.mjs), which holds
-// the API keys in its environment. The schema travels with the request so
-// the server stays a pass-through.
 let serverConfig = { providers: {}, tts: false };
 
 async function loadConfig() {
@@ -30,34 +32,29 @@ async function loadConfig() {
   }
   const found = Object.values(providers).filter((p) => serverConfig.providers[p.name]).map((p) => p.label).join(" and ");
   els.keyStatus.textContent = serverConfig.tts
-    ? `Keys found in your shell env: ${found}. Spoken questions use OpenAI audio.`
-    : `Keys found in your shell env: ${found}. Spoken questions fall back to the browser voice; set OPENAI_API_KEY for the real one.`;
+    ? `Keys found in your shell env: ${found}. The investor speaks with OpenAI audio when voice is on.`
+    : `Keys found in your shell env: ${found}. Voice falls back to the browser's own speech; set OPENAI_API_KEY for the real one.`;
 }
 
 async function callProvider({ model, system, messages }) {
   const resp = await fetch("/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      provider: els.provider.value,
-      model,
-      system,
-      messages,
-      schema: TURN_SCHEMA,
-    }),
+    body: JSON.stringify({ provider: els.provider.value, model, system, messages, schema: TURN_SCHEMA }),
   });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) throw new Error(data.error || `Server error (${resp.status})`);
   return data.turn;
 }
 
-
 // ------------------------------------------------------------------ state
 const state = {
-  personaMd: null,
-  stage: null,
+  stage: null,        // current STAGES entry
+  chain: null,        // {fromWho, weaknesses, pitch} when warm-introduced
   system: null,
-  messages: [], // provider-agnostic {role, content:string}
+  messages: [],
+  started: false,     // first send is the pitch
+  pitchText: "",
   lastReport: null,
   busy: false,
 };
@@ -65,57 +62,146 @@ const state = {
 // --------------------------------------------------------------- elements
 const $ = (id) => document.getElementById(id);
 const els = {
-  provider: $("provider"), model: $("model"), keyStatus: $("key-status"),
-  stages: $("stages"), pitch: $("pitch"), start: $("start"),
-  setupError: $("setup-error"),
-  panelSession: $("panel-session"), transcript: $("transcript"),
-  answerBox: $("answer-box"), answer: $("answer"), send: $("send"),
-  sessionError: $("session-error"),
-  panelReport: $("panel-report"), report: $("report"),
-  retry: $("retry"), restart: $("restart"),
-  deck: $("deck"), deckStatus: $("deck-status"),
-  voiceToggle: $("voice-toggle"), mic: $("mic"),
-  panelHistory: $("panel-history"), history: $("history"), clearHistory: $("clear-history"),
+  lobby: $("scene-lobby"), room: $("scene-room"),
+  stages: $("stages"), keyStatus: $("key-status"),
+  history: $("history"), panelHistory: $("panel-history"), clearHistory: $("clear-history"),
+  openSettings: $("open-settings"), settings: $("settings"), closeSettings: $("close-settings"),
+  provider: $("provider"), model: $("model"),
+  leave: $("leave"), roomName: $("room-name"), roomTag: $("room-tag"),
+  voiceToggle: $("voice-toggle"),
+  transcript: $("transcript"), sessionError: $("session-error"),
+  deck: $("deck"), deckStatus: $("deck-status"), attach: $("attach"),
+  answer: $("answer"), mic: $("mic"), send: $("send"),
 };
 
-// ------------------------------------------------------------------ setup
+function esc(t) {
+  const d = document.createElement("div");
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+function showError(msg) {
+  els.sessionError.innerHTML = `<div class="error">${esc(msg)}</div>`;
+}
+
+// ------------------------------------------------------------------ prefs
 function restorePrefs() {
-  localStorage.removeItem("pg.key"); // keys no longer touch the browser
+  localStorage.removeItem("pg.key"); // keys never touch the browser
   const p = localStorage.getItem("pg.provider");
   if (p && p in DEFAULT_MODELS) els.provider.value = p;
   els.model.value = localStorage.getItem("pg.model") || DEFAULT_MODELS[els.provider.value];
 }
-
+function savePrefs() {
+  localStorage.setItem("pg.provider", els.provider.value);
+  localStorage.setItem("pg.model", els.model.value);
+}
 els.provider.addEventListener("change", () => {
   els.model.value = DEFAULT_MODELS[els.provider.value];
   savePrefs();
 });
 els.model.addEventListener("change", savePrefs);
-function savePrefs() {
-  localStorage.setItem("pg.provider", els.provider.value);
-  localStorage.setItem("pg.model", els.model.value);
+
+function renderProviderOptions() {
+  els.provider.innerHTML = "";
+  for (const p of Object.values(providers)) {
+    const opt = document.createElement("option");
+    opt.value = p.name;
+    opt.textContent = p.label;
+    els.provider.appendChild(opt);
+  }
 }
 
-function renderStages() {
+els.openSettings.addEventListener("click", () => { els.settings.hidden = false; });
+els.closeSettings.addEventListener("click", () => { els.settings.hidden = true; });
+els.settings.addEventListener("click", (e) => { if (e.target === els.settings) els.settings.hidden = true; });
+
+// ------------------------------------------------------------------ lobby
+function renderDoors() {
   els.stages.innerHTML = "";
   for (const s of STAGES) {
     const btn = document.createElement("button");
-    btn.className = "stage-card";
-    btn.innerHTML = `<div class="stage-name">${s.name}</div><div class="stage-who">${s.who}</div><div class="stage-desc">${s.desc}</div>`;
-    btn.addEventListener("click", () => {
-      state.stage = s;
-      document.querySelectorAll(".stage-card").forEach((b) => b.classList.remove("selected"));
-      btn.classList.add("selected");
-    });
+    btn.className = "door";
+    btn.setAttribute("role", "listitem");
+    btn.innerHTML = `
+      <span class="door-stage">${esc(s.name)}</span>
+      <span class="door-who">${esc(s.who)}</span>
+      <span class="door-desc">${esc(s.desc)}</span>
+      <span class="door-enter">Enter the room →</span>`;
+    btn.addEventListener("click", () => enterRoom(s, null));
     els.stages.appendChild(btn);
   }
 }
 
+// ------------------------------------------------------------------- room
+async function enterRoom(stage, chain) {
+  stopSpeaking();
+  state.stage = stage;
+  state.chain = chain;
+  state.messages = [];
+  state.started = false;
+  state.lastReport = null;
+  state.pitchText = chain ? chain.pitch : "";
+  els.sessionError.innerHTML = "";
+  els.deckStatus.textContent = "";
+
+  let personaMd;
+  try {
+    const resp = await fetch(stage.file);
+    if (!resp.ok) throw new Error();
+    personaMd = await resp.text();
+  } catch {
+    showError("Couldn't load the persona file. Serve this folder with node server.mjs; opening index.html directly via file:// blocks it.");
+    return;
+  }
+
+  const priorWeaknesses = chain
+    ? chain.weaknesses
+    : loadHistory().filter((h) => h.stage === stage.id).pop()?.report?.weaknesses;
+  const warmIntro = chain
+    ? `${chain.fromWho} put this founder through a full grilling, vouched for them, and made this introduction personally.`
+    : null;
+  state.system = buildSystemPrompt(personaMd, priorWeaknesses, warmIntro);
+
+  // set the scene
+  els.roomName.textContent = stage.who;
+  els.roomTag.hidden = !chain;
+  if (chain) els.roomTag.textContent = `intro from ${chain.fromWho}`;
+  els.lobby.hidden = true;
+  els.room.hidden = false;
+  els.transcript.innerHTML = "";
+  els.mic.hidden = !SpeechRec;
+
+  // the investor speaks first
+  const opener = chain ? stage.introOpener : stage.opener;
+  addOpenerTurn(opener);
+  speak([opener]);
+
+  els.answer.value = chain ? chain.pitch : "";
+  els.answer.placeholder = "Your pitch. Paste it, attach a deck, or just talk…";
+  autogrow();
+  els.answer.focus();
+  els.deckStatus.textContent = chain
+    ? "Same pitch, pre-filled. Tighten it if you learned something downstairs, then send."
+    : "";
+}
+
+function leaveRoom() {
+  stopSpeaking();
+  if (voice.listening) stopListening();
+  els.room.hidden = true;
+  els.lobby.hidden = false;
+  renderHistory();
+  window.scrollTo({ top: 0 });
+}
+els.leave.addEventListener("click", leaveRoom);
+
 // -------------------------------------------------------------- rendering
-function esc(t) {
-  const d = document.createElement("div");
-  d.textContent = t;
-  return d.innerHTML;
+function addOpenerTurn(text) {
+  const div = document.createElement("div");
+  div.className = "turn investor";
+  div.innerHTML = `<div class="who">${esc(state.stage.who)}</div>
+    <div class="bubble"><div class="opener">“${esc(text)}”</div></div>`;
+  els.transcript.appendChild(div);
 }
 
 function addFounderTurn(text) {
@@ -123,6 +209,7 @@ function addFounderTurn(text) {
   div.className = "turn founder";
   div.innerHTML = `<div class="who">You</div><div class="bubble">${esc(text)}</div>`;
   els.transcript.appendChild(div);
+  div.scrollIntoView({ behavior: "smooth", block: "end" });
 }
 
 function addInvestorTurn(turn) {
@@ -151,7 +238,7 @@ function addThinking() {
   const div = document.createElement("div");
   div.className = "thinking";
   div.id = "thinking";
-  div.textContent = `${state.stage.who} is thinking`;
+  div.textContent = `${state.stage.who} is weighing you`;
   els.transcript.appendChild(div);
   div.scrollIntoView({ behavior: "smooth", block: "end" });
 }
@@ -180,24 +267,76 @@ function renderReport(report) {
         <span class="why">You said: "${esc(w.your_answer_gist)}" — ${esc(w.why_it_hurt)}</span></li>`
     )
     .join("");
-  els.report.innerHTML = `
+  const card = document.createElement("div");
+  card.className = "turn";
+  card.innerHTML = `
     <div class="report">
       <h3>Weighted score: ${Math.round(total)} / 100</h3>
       ${rows}
       <div class="weaknesses"><h4>Where you lost the room</h4><ul>${weak}</ul></div>
-      <div class="verdict"><h4>Verdict</h4><p>"${esc(report.verdict)}"</p></div>
+      <div class="verdict"><h4>Verdict</h4><p>“${esc(report.verdict)}”</p></div>
     </div>`;
-  els.panelReport.hidden = false;
-  els.retry.hidden = report.weaknesses.length === 0;
-  els.panelReport.scrollIntoView({ behavior: "smooth", block: "start" });
+  els.transcript.appendChild(card);
   saveSessionToHistory(report, total);
+  renderMoment(report, total);
+  card.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// The moment after the verdict: an intro upstairs, a close, or the door.
+function renderMoment(report, total) {
+  const passed = Math.round(total) >= INTRO_BAR;
+  const nextStage = state.stage.next ? STAGES.find((s) => s.id === state.stage.next) : null;
+
+  const div = document.createElement("div");
+  div.className = "turn moment";
+  const line = passed
+    ? state.stage.introLine
+    : "No intro today. Fix what you just heard, then come back through the same door.";
+  div.innerHTML = `<div class="who" style="text-align:center">${esc(state.stage.who)}</div>
+    <div class="moment-line ${passed ? "pass" : "fail"}">“${esc(line)}”</div>
+    <div class="moment-actions"></div>`;
+  const actions = div.querySelector(".moment-actions");
+
+  const mkBtn = (label, cls, fn) => {
+    const b = document.createElement("button");
+    b.className = cls;
+    b.textContent = label;
+    b.addEventListener("click", fn);
+    actions.appendChild(b);
+  };
+
+  if (passed && nextStage) {
+    mkBtn(`Take the intro → ${nextStage.who}`, "primary-btn", () => {
+      div.remove();
+      enterRoom(nextStage, { fromWho: state.stage.who, weaknesses: report.weaknesses, pitch: state.pitchText });
+    });
+    mkBtn("Retry my weakest answers", "mono-btn", () => retryWeakest(div));
+  } else if (passed) {
+    mkBtn("Back to the lobby", "primary-btn", leaveRoom);
+    mkBtn("Retry my weakest answers", "mono-btn", () => retryWeakest(div));
+  } else {
+    mkBtn("Retry my weakest answers", "primary-btn", () => retryWeakest(div));
+    mkBtn("Leave", "mono-btn", leaveRoom);
+  }
+
+  els.transcript.appendChild(div);
+  speak([line]);
+}
+
+async function retryWeakest(momentDiv) {
+  if (state.busy || !state.lastReport) return;
+  momentDiv.remove();
+  const targets = state.lastReport.weaknesses.map((w) => `- ${w.question}`).join("\n");
+  const msg = `I want to retry my weakest answers. Grill me again on exactly these:\n${targets}`;
+  state.messages.push({ role: "user", content: msg });
+  addFounderTurn(msg);
+  await investorTurn();
 }
 
 // ---------------------------------------------------------------- session
 async function investorTurn() {
   state.busy = true;
   els.send.disabled = true;
-  els.start.disabled = true;
   els.sessionError.innerHTML = "";
   addThinking();
   try {
@@ -206,123 +345,93 @@ async function investorTurn() {
       system: state.system,
       messages: state.messages,
     });
-    // Keep the assistant's structured turn in history so it remembers itself.
     state.messages.push({ role: "assistant", content: JSON.stringify(turn) });
     removeThinking();
     if (turn.phase === "report" && turn.report) {
       addInvestorTurn({ ...turn, questions: [] });
-      els.answerBox.hidden = true;
       renderReport(turn.report);
       speak([turn.commentary, turn.report.verdict]);
     } else {
       addInvestorTurn(turn);
-      els.answerBox.hidden = false;
-      els.mic.hidden = !SpeechRec;
-      els.answer.value = "";
+      els.answer.placeholder = "Answer the room…";
       els.answer.focus();
       speak([turn.commentary, ...turn.questions.map((q, i) => `Question ${i + 1}. ${q}`)]);
     }
   } catch (e) {
     removeThinking();
-    els.sessionError.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    showError(e.message);
   } finally {
     state.busy = false;
     els.send.disabled = false;
-    els.start.disabled = false;
   }
 }
 
-els.start.addEventListener("click", async () => {
-  els.setupError.innerHTML = "";
-  const problems = [];
-  if (!serverConfig.providers[els.provider.value]) {
-    problems.push(`an ${els.provider.value === "openai" ? "OPENAI" : "ANTHROPIC"}_API_KEY in the server's environment`);
-  }
-  if (!state.stage) problems.push("a stage");
-  if (!els.pitch.value.trim()) problems.push("your pitch");
-  if (problems.length) {
-    els.setupError.innerHTML = `<div class="error">Missing: ${problems.join(", ")}.</div>`;
-    return;
-  }
-  savePrefs();
-  try {
-    const resp = await fetch(state.stage.file);
-    if (!resp.ok) throw new Error();
-    state.personaMd = await resp.text();
-  } catch {
-    els.setupError.innerHTML = `<div class="error">Couldn't load the persona file. Serve this folder over HTTP (e.g. <code>npx serve</code>) — opening index.html directly via file:// blocks it.</div>`;
-    return;
-  }
-  const lastSameStage = loadHistory().filter((h) => h.stage === state.stage.id).pop();
-  state.system = buildSystemPrompt(state.personaMd, lastSameStage?.report?.weaknesses);
-  state.messages = [{ role: "user", content: `MY PITCH:\n\n${els.pitch.value.trim()}` }];
-  els.transcript.innerHTML = "";
-  els.panelSession.hidden = false;
-  els.panelReport.hidden = true;
-  addFounderTurn(els.pitch.value.trim());
-  els.panelSession.scrollIntoView({ behavior: "smooth", block: "start" });
-  await investorTurn();
-});
-
-els.send.addEventListener("click", async () => {
+async function sendAnswer() {
   const text = els.answer.value.trim();
-  if (!text || state.busy) return;
-  state.messages.push({ role: "user", content: text });
+  if (!text || state.busy || els.room.hidden) return;
+  if (!serverConfig.providers[els.provider.value]) {
+    showError(`No key for ${els.provider.value} in the server's environment. Export it and restart the server.`);
+    return;
+  }
+  els.answer.value = "";
+  autogrow();
+  els.deckStatus.textContent = "";
+  if (!state.started) {
+    state.started = true;
+    state.pitchText = text;
+    state.messages = [{ role: "user", content: `MY PITCH:\n\n${text}` }];
+  } else {
+    state.messages.push({ role: "user", content: text });
+  }
   addFounderTurn(text);
-  els.answerBox.hidden = true;
   await investorTurn();
-});
+}
 
-els.retry.addEventListener("click", async () => {
-  if (state.busy || !state.lastReport) return;
-  const targets = state.lastReport.weaknesses.map((w) => `- ${w.question}`).join("\n");
-  const msg = `I want to retry my weakest answers. Grill me again on exactly these:\n${targets}`;
-  state.messages.push({ role: "user", content: msg });
-  addFounderTurn(msg);
-  els.panelReport.hidden = true;
-  await investorTurn();
+els.send.addEventListener("click", sendAnswer);
+els.answer.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendAnswer();
+  }
 });
-
-els.restart.addEventListener("click", () => {
-  state.messages = [];
-  state.lastReport = null;
-  els.transcript.innerHTML = "";
-  els.panelSession.hidden = true;
-  els.panelReport.hidden = true;
-  els.answerBox.hidden = true;
-  window.scrollTo({ top: 0, behavior: "smooth" });
-});
+function autogrow() {
+  els.answer.style.height = "auto";
+  els.answer.style.height = `${Math.min(els.answer.scrollHeight, 192)}px`;
+}
+els.answer.addEventListener("input", autogrow);
 
 // ------------------------------------------------------------ deck upload
 async function handleDeckFile(file) {
   if (!file) return;
-  els.setupError.innerHTML = "";
+  els.sessionError.innerHTML = "";
   els.deckStatus.textContent = `Parsing ${file.name}…`;
   try {
     const text = await OpenRoundParse.parseFile(file);
     if (!text.trim()) {
-      throw new Error("No extractable text — scanned PDF or image-only deck? Paste your text instead.");
+      throw new Error("No extractable text. Scanned or image-only deck? Paste the words instead.");
     }
-    const existing = els.pitch.value.trim();
-    els.pitch.value = existing ? `${existing}\n\n${text}` : text;
-    els.deckStatus.textContent = `${file.name} → ${text.length.toLocaleString()} characters extracted. Review below, edit freely, then enter the room.`;
+    const existing = els.answer.value.trim();
+    els.answer.value = existing ? `${existing}\n\n${text}` : text;
+    autogrow();
+    els.deckStatus.textContent = `${file.name}: ${text.length.toLocaleString()} characters extracted into your answer. Edit freely, then send.`;
   } catch (e) {
     els.deckStatus.textContent = "";
-    els.setupError.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    showError(e.message);
   } finally {
     els.deck.value = "";
   }
 }
-
+els.attach.addEventListener("click", () => els.deck.click());
 els.deck.addEventListener("change", () => handleDeckFile(els.deck.files[0]));
-els.pitch.addEventListener("dragover", (e) => {
+const composerEl = document.querySelector(".composer");
+composerEl.addEventListener("dragover", (e) => {
   e.preventDefault();
-  els.pitch.classList.add("dropping");
+  composerEl.classList.add("dropping");
 });
-els.pitch.addEventListener("dragleave", () => els.pitch.classList.remove("dropping"));
-els.pitch.addEventListener("drop", (e) => {
+composerEl.addEventListener("dragleave", () => composerEl.classList.remove("dropping"));
+composerEl.addEventListener("drop", (e) => {
   e.preventDefault();
-  els.pitch.classList.remove("dropping");
+  composerEl.classList.remove("dropping");
   handleDeckFile(e.dataTransfer.files[0]);
 });
 
@@ -369,14 +478,14 @@ async function speak(parts) {
 
 els.voiceToggle.addEventListener("click", () => {
   voice.on = !voice.on;
-  els.voiceToggle.textContent = voice.on ? "Voice: on" : "Voice: off";
+  els.voiceToggle.textContent = voice.on ? "Voice on" : "Voice off";
+  els.voiceToggle.setAttribute("aria-pressed", String(voice.on));
   els.voiceToggle.classList.toggle("on", voice.on);
   if (!voice.on) stopSpeaking();
 });
 
 function stopListening() {
   voice.listening = false;
-  els.mic.textContent = "\u{1F3A4} Speak";
   els.mic.classList.remove("recording");
   if (voice.rec) voice.rec.stop();
 }
@@ -393,14 +502,16 @@ els.mic.addEventListener("click", () => {
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) {
         const t = e.results[i][0].transcript.trim();
-        if (t) els.answer.value = (els.answer.value.trim() + " " + t).trim();
+        if (t) {
+          els.answer.value = (els.answer.value.trim() + " " + t).trim();
+          autogrow();
+        }
       }
     }
   };
   voice.rec.onend = () => { if (voice.listening) stopListening(); };
   voice.rec.onerror = () => stopListening();
   voice.listening = true;
-  els.mic.textContent = "⏹ Stop";
   els.mic.classList.add("recording");
   voice.rec.start();
 });
@@ -427,7 +538,6 @@ function saveSessionToHistory(report, total) {
     report,
   });
   localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(-30)));
-  renderHistory();
 }
 
 function renderHistory() {
@@ -471,19 +581,9 @@ els.clearHistory.addEventListener("click", () => {
   renderHistory();
 });
 
-function renderProviderOptions() {
-  els.provider.innerHTML = "";
-  for (const p of Object.values(providers)) {
-    const opt = document.createElement("option");
-    opt.value = p.name;
-    opt.textContent = p.label;
-    els.provider.appendChild(opt);
-  }
-}
-
 // ------------------------------------------------------------------- boot
 renderProviderOptions();
 restorePrefs();
-renderStages();
+renderDoors();
 renderHistory();
 loadConfig();

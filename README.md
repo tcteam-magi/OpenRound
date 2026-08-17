@@ -16,12 +16,13 @@ A pre-seed angel, a seed VC, and a Series A partner grill different things:
 | Seed | Seed VC | What your traction means, ICP clarity, GTM hypothesis, why now | Polished unit economics |
 | Series A | Metrics partner | ARR growth, retention curves, burn multiple, the scale story | Vision speeches (numbers replace them) |
 
-## How a session works
+## How a meeting works
 
-1. Pick your stage. That decides who walks into the room.
-2. Paste your pitch, or upload a deck (pdf, pptx, docx, txt, md). Your browser parses the file locally; it never leaves your machine. From a pptx it pulls slide text plus the parts most extractors skip: speaker notes (where the real pitch usually lives), chart labels, SmartArt text, and image alt text. What it cannot do is read text baked into images; there is no OCR, so paste the words for image-only slides.
+1. Pick a door. The Angel, the Seed VC, or the Metrics Partner is waiting behind it.
+2. The investor speaks first: "So: what are you raising?" Your first answer is your pitch. Type it, dictate it, or attach a deck (pdf, pptx, docx, txt, md); your browser parses the file locally and it never leaves your machine. From a pptx it pulls slide text plus the parts most extractors skip: speaker notes (where the real pitch usually lives), chart labels, SmartArt text, and image alt text. It cannot read text baked into images; there is no OCR, so paste the words for image-only slides.
 3. Get grilled through three rounds: clarifying questions, then attacks on your weakest rubric lines, then follow-ups on the red flags you exposed. The investor grades every answer against the persona's pass bar (0 to 10: answered, partial, dodged). A dodged answer doesn't buy you the next round; it gets re-pressed once, harder, and dodges cap the related rubric score in the report.
-4. Read the report: rubric scores, the answers that hurt you most, and a verdict. Then hit "Retry my weakest answers" and face them again.
+4. Read the report: rubric scores, the answers that hurt you most, and a verdict.
+5. Earn the intro. Score 60 or better and the investor walks you upstairs: a warm introduction to the next stage's investor, carrying your pitch and everything you fumbled (a warm intro raises the bar, it doesn't lower it). Pass Series A and it goes to the partnership on Monday. Miss the bar and there is no intro today: retry your weakest answers, or come back through the same door.
 
 ## Run it
 
@@ -88,7 +89,7 @@ History doesn't sync between browsers. And there is no hosted version, on purpos
 
 ## Acknowledgements
 
-The pptx and docx parsing approach (which OOXML parts to read, how to keep the text faithful) comes from [genoffice](https://github.com/genspark-ai/genoffice)'s `file-parse` package (Apache-2.0), rebuilt for the browser on DOMParser. The answer-grading gate adapts the clarity-scoring and threshold-gate idea from [ouroboros](https://github.com/Q00/ouroboros)'s interview protocol (MIT).
+The pptx and docx parsing approach (which OOXML parts to read, how to keep the text faithful) comes from [genoffice](https://github.com/genspark-ai/genoffice)'s `file-parse` package (Apache-2.0), rebuilt for the browser on DOMParser. The answer-grading gate adapts the clarity-scoring and threshold-gate idea from [ouroboros](https://github.com/Q00/ouroboros)'s interview protocol (MIT). The design direction (the monochrome editorial type stack and the pre-delivery UX checklist) follows [ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) (MIT).
 
 ## License
 

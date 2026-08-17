@@ -134,8 +134,12 @@ function addInvestorTurn(turn) {
   const div = document.createElement("div");
   div.className = "turn investor";
   const qs = turn.questions.map((q) => `<li>${esc(q)}</li>`).join("");
+  const grades = (turn.answer_grades || [])
+    .map((g, i) => `<span class="grade ${esc(g.verdict)}" title="${esc(g.question)} — ${esc(g.note)}">Q${i + 1} ${g.score}/10 ${esc(g.verdict)}</span>`)
+    .join("");
   div.innerHTML = `<div class="who">${esc(state.stage.who)}</div>
     <div class="bubble">
+      ${grades ? `<div class="grades">${grades}</div>` : ""}
       <div class="commentary">${esc(turn.commentary)}</div>
       ${qs ? `<ol>${qs}</ol>` : ""}
     </div>`;

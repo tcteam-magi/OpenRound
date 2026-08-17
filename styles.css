@@ -135,6 +135,19 @@ button.ghost:hover { color: var(--paper); border-color: var(--paper-dim); }
   padding-left: 0.9rem;
 }
 .turn.investor .bubble .commentary { color: var(--paper-dim); font-style: italic; margin-bottom: 0.5rem; }
+.grades { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.55rem; }
+.grade {
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--paper-dim);
+  cursor: help;
+}
+.grade.answered { color: var(--ok); border-color: var(--ok); }
+.grade.dodged { color: var(--ember); border-color: var(--ember); }
 .turn.investor .bubble ol { margin-left: 1.2rem; }
 .turn.investor .bubble ol li { margin-bottom: 0.45rem; }
 .turn.founder .bubble {

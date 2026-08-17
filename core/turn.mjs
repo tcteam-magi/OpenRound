@@ -46,10 +46,24 @@ export const TURN_SCHEMA = {
     phase: { type: "string", enum: ["questions", "report"] },
     round_label: { type: "string" },
     commentary: { type: "string" },
+    answer_grades: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          question: { type: "string" },
+          score: { type: "integer" },
+          verdict: { type: "string", enum: ["answered", "partial", "dodged"] },
+          note: { type: "string" },
+        },
+        required: ["question", "score", "verdict", "note"],
+        additionalProperties: false,
+      },
+    },
     questions: { type: "array", items: { type: "string" } },
     report: { anyOf: [{ type: "null" }, REPORT_SCHEMA] },
   },
-  required: ["phase", "round_label", "commentary", "questions", "report"],
+  required: ["phase", "round_label", "commentary", "answer_grades", "questions", "report"],
   additionalProperties: false,
 };
 
@@ -90,6 +104,17 @@ between rounds:
   that was fog gets re-pressed here.
 - After the founder answers Round 3 (phase: report): deliver the report.
 
+ANSWER GRADING AND THE GATE
+After every founder reply, grade each question you asked in your previous
+turn, in answer_grades: score 0-10 against your pass bar (10 = fully met it),
+verdict "answered" (7-10), "partial" (4-6), or "dodged" (0-3), plus a one-line
+note in your voice. answer_grades is an empty array on your first turn.
+The gate: a dodged answer does not buy the founder the next round. If any
+grade is "dodged" and you have not yet re-pressed in the current round, stay
+in the same round and re-ask ONLY the dodged and partial questions, harder
+and more specific, with round_label "<round name> — pressed". At most one
+re-press per round; after it, advance regardless and let the grades stand.
+
 RETRY MODE
 If the founder later asks to retry their weakest answers, run one extra round
 ("Retry", phase: questions) of up to 3 questions targeting exactly those
@@ -102,8 +127,10 @@ Every turn must satisfy the JSON schema you are constrained to:
   commentary is 1-3 sentences of in-character reaction to what you just heard.
 - phase "report": questions must be an empty array. Scores: one entry per
   rubric criterion, weight copied from the rubric, score 0-10 where 10 means
-  the answer fully met your pass bar. Weaknesses: the 2-3 answers that hurt
-  the founder most, quoted by gist, with why_it_hurt in your voice. Verdict:
-  2-4 sentences, in character, ending with whether you would take the next
-  meeting.${history}`;
+  the answer fully met your pass bar. The grades bind the report: a rubric
+  criterion whose supporting questions were dodged even after the re-press
+  cannot score above 3, and dodged questions belong in weaknesses. Weaknesses:
+  the 2-3 answers that hurt the founder most, quoted by gist, with why_it_hurt
+  in your voice. Verdict: 2-4 sentences, in character, ending with whether you
+  would take the next meeting.${history}`;
 }

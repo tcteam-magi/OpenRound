@@ -20,7 +20,7 @@ A pre-seed angel, a seed VC, and a Series A partner grill different things:
 
 1. Pick your stage. That decides who walks into the room.
 2. Paste your pitch, or upload a deck (pdf, pptx, docx, txt, md). Your browser parses the file locally; it never leaves your machine. Scanned or image-only decks won't extract, so paste text for those.
-3. Get grilled through three rounds: clarifying questions, then attacks on your weakest rubric lines, then follow-ups on the red flags you exposed. A foggy answer gets pressed again.
+3. Get grilled through three rounds: clarifying questions, then attacks on your weakest rubric lines, then follow-ups on the red flags you exposed. The investor grades every answer against the persona's pass bar (0 to 10: answered, partial, dodged). A dodged answer doesn't buy you the next round; it gets re-pressed once, harder, and dodges cap the related rubric score in the report.
 4. Read the report: rubric scores, the answers that hurt you most, and a verdict. Then hit "Retry my weakest answers" and face them again.
 
 ## Run it
@@ -88,7 +88,7 @@ History doesn't sync between browsers. And there is no hosted version, on purpos
 
 ## Acknowledgements
 
-The pptx and docx parsing approach (which OOXML parts to read, how to keep the text faithful) comes from [genoffice](https://github.com/genspark-ai/genoffice)'s `file-parse` package (Apache-2.0), rebuilt for the browser on DOMParser.
+The pptx and docx parsing approach (which OOXML parts to read, how to keep the text faithful) comes from [genoffice](https://github.com/genspark-ai/genoffice)'s `file-parse` package (Apache-2.0), rebuilt for the browser on DOMParser. The answer-grading gate adapts the clarity-scoring and threshold-gate idea from [ouroboros](https://github.com/Q00/ouroboros)'s interview protocol (MIT).
 
 ## License
 

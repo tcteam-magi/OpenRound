@@ -26,13 +26,21 @@ try {
   exit(1);
 }
 
+function printGrades(grades) {
+  for (const [i, g] of grades.entries()) {
+    console.log(`  [Q${i + 1}: ${g.score}/10 ${g.verdict}] ${g.note}`);
+  }
+}
+
 while (turn.phase === "questions") {
+  if (turn.answer_grades.length) printGrades(turn.answer_grades);
   console.log(`\n[${turn.round_label}] ${turn.commentary}`);
   turn.questions.forEach((q, i) => console.log(`  ${i + 1}. ${q}`));
   const answer = await rl.question("\nyour answer > ");
   turn = await session.answer(answer);
 }
 
+if (turn.answer_grades.length) printGrades(turn.answer_grades);
 console.log(`\n${turn.commentary}\n`);
 const total = turn.report.scores.reduce((a, s) => a + (s.score / 10) * s.weight, 0);
 console.log(`Weighted score: ${Math.round(total)} / 100`);

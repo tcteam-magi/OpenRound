@@ -94,6 +94,44 @@ const OpenRoundParse = (() => {
     return out;
   }
 
+  // "../charts/chart1.xml" relative to "ppt/slides" → "ppt/charts/chart1.xml"
+  function resolveTarget(base, target) {
+    if (target.startsWith("/")) return target.slice(1);
+    const out = [];
+    for (const part of `${base}/${target}`.split("/")) {
+      if (part === "..") out.pop();
+      else if (part && part !== ".") out.push(part);
+    }
+    return out.join("/");
+  }
+
+  function allParagraphs(doc) {
+    const lines = [];
+    for (const p of doc.getElementsByTagName("a:p")) {
+      const line = paragraphText(p, "a:t", { "a:br": "\n" });
+      if (line.trim()) lines.push(line.trim());
+    }
+    return lines;
+  }
+
+  // Chart parts keep labels two ways: rich-text (a:t, e.g. the title) and
+  // plain cached values (c:v, categories and series names mixed with the
+  // numeric data points). Keep the text, drop the bare numbers.
+  function chartText(doc) {
+    const parts = new Set(allParagraphs(doc));
+    for (const v of doc.getElementsByTagName("c:v")) {
+      const t = v.textContent.trim();
+      if (t && !/^-?\d+([.,]\d+)?%?$/.test(t)) parts.add(t);
+    }
+    return [...parts].join(" · ");
+  }
+
+  // Notes pages carry a slide-number placeholder; a line that is only a
+  // number is that placeholder, not a note.
+  function notesText(doc) {
+    return allParagraphs(doc).filter((l) => !/^\d+$/.test(l)).join("\n");
+  }
+
   async function pptxToText(buf) {
     const JSZip = await loadJSZip();
     const zip = await JSZip.loadAsync(buf);
@@ -105,14 +143,42 @@ const OpenRoundParse = (() => {
       .filter(Boolean)
       .sort((a, b) => a.n - b.n);
     if (!slides.length) throw new Error("No slides found — is this a valid .pptx?");
+
     const sections = [];
     for (const s of slides) {
       const doc = parseXml(await zip.files[s.path].async("text"));
-      const paras = [];
-      for (const p of doc.getElementsByTagName("a:p")) {
-        const line = paragraphText(p, "a:t", { "a:br": "\n" });
-        if (line.trim()) paras.push(line);
+      const paras = allParagraphs(doc);
+
+      // Alt text on pictures — often the only text an image-only slide has.
+      for (const nv of doc.getElementsByTagName("p:cNvPr")) {
+        const descr = (nv.getAttribute("descr") || "").trim();
+        if (descr) paras.push(`[image: ${descr}]`);
       }
+
+      // Follow the slide's relationships to the parts that hold the rest of
+      // the story: SmartArt data, charts, and the speaker notes.
+      const relFile = zip.file(`ppt/slides/_rels/slide${s.n}.xml.rels`);
+      if (relFile) {
+        const relDoc = parseXml(await relFile.async("text"));
+        const notes = [];
+        for (const rel of relDoc.getElementsByTagName("Relationship")) {
+          const type = rel.getAttribute("Type") || "";
+          const file = zip.file(resolveTarget("ppt/slides", rel.getAttribute("Target") || ""));
+          if (!file) continue;
+          if (type.endsWith("/diagramData")) {
+            const t = allParagraphs(parseXml(await file.async("text"))).join(" · ");
+            if (t) paras.push(`[diagram] ${t}`);
+          } else if (type.endsWith("/chart")) {
+            const t = chartText(parseXml(await file.async("text")));
+            if (t) paras.push(`[chart] ${t}`);
+          } else if (type.endsWith("/notesSlide")) {
+            const t = notesText(parseXml(await file.async("text")));
+            if (t) notes.push(t);
+          }
+        }
+        for (const t of notes) paras.push(`Speaker notes:\n${t}`);
+      }
+
       sections.push([`## Slide ${s.n}`, ...paras].join("\n"));
     }
     return sections.join("\n\n");

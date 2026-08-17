@@ -8,7 +8,7 @@ It runs on your machine. Your API keys stay in your shell environment, requests 
 
 ## Pick your stage
 
-A pre-seed angel, a seed VC, and a Series A partner grill different things:
+A pre-seed angel, a seed VC, and a Series A partner grill different things. You don't have to pick: the app opens on a host who places you from your blurb. The doors below are still there when you'd rather choose yourself.
 
 | Stage | Persona | Grills you on | Doesn't care about |
 |---|---|---|---|
@@ -18,8 +18,8 @@ A pre-seed angel, a seed VC, and a Series A partner grill different things:
 
 ## How a meeting works
 
-1. Pick a door. The Angel, the Seed VC, or the Metrics Partner is waiting behind it.
-2. The investor speaks first: "So: what are you raising?" Your first answer is your pitch. Type it, dictate it, or attach a deck (pdf, pptx, docx, txt, md); your browser parses the file locally and it never leaves your machine. From a pptx it pulls slide text plus the parts most extractors skip: speaker notes (where the real pitch usually lives), chart labels, SmartArt text, and image alt text. It cannot read text baked into images; there is no OCR, so paste the words for image-only slides.
+1. Meet Mr. Knows-Everybody. The door opens on the house super-connector, who asks how it's going and takes your blurb or your deck. He works out which investor you should actually meet, texts ahead, and sends you up with a note. He intros everyone, so the note gets you the meeting and nothing else; the investor's bar doesn't move. In a hurry, "Skip the small talk" takes you straight to the three doors, and grilling history makes him nosy about how your last meeting went.
+2. The investor speaks first: "So: what are you raising?" If you came up with his note, they have skimmed it; they still make you pitch live, in your own words. Your first answer is your pitch. Type it, dictate it, or attach a deck (pdf, pptx, docx, txt, md); your browser parses the file locally and it never leaves your machine. From a pptx it pulls slide text plus the parts most extractors skip: speaker notes (where the real pitch usually lives), chart labels, SmartArt text, and image alt text. It cannot read text baked into images; there is no OCR, so paste the words for image-only slides.
 3. Get grilled through three rounds: clarifying questions, then attacks on your weakest rubric lines, then follow-ups on the red flags you exposed. The investor grades every answer against the persona's pass bar (0 to 10: answered, partial, dodged). A dodged answer doesn't buy you the next round; it gets re-pressed once, harder, and dodges cap the related rubric score in the report.
 4. Read the report: rubric scores, the answers that hurt you most, and a verdict.
 5. Earn the intro. Score 60 or better and the investor walks you upstairs: a warm introduction to the next stage's investor, carrying your pitch and everything you fumbled (a warm intro raises the bar, it doesn't lower it). Pass Series A and it goes to the partnership on Monday. Miss the bar and there is no intro today: retry your weakest answers, or come back through the same door.

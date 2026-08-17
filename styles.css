@@ -69,6 +69,13 @@ button { cursor: pointer; font-family: var(--mono); }
 }
 
 .hint { font-family: var(--mono); font-size: 0.72rem; color: var(--paper-dim); line-height: 1.6; }
+.text-btn {
+  background: none; border: none; padding: 0;
+  font: inherit; color: var(--ember);
+  text-decoration: underline; text-underline-offset: 3px;
+  transition: color 200ms ease;
+}
+.text-btn:hover { color: var(--ember-hi); }
 .hint code { color: var(--paper); background: var(--ink-2); padding: 0.05rem 0.35rem; border-radius: 3px; }
 .error-inline { color: #f0a48c; }
 .error {

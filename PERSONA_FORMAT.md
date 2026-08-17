@@ -31,6 +31,10 @@ What kind of answer lets the founder move on, and what kind triggers a dig.
 Be concrete: "a number with a denominator" beats "a good answer".
 ```
 
+## The host persona
+
+`mr-knows-everybody.md` is the one persona that is not an investor: the super-connector who opens the app, hears your blurb, and routes you to a stage. He has no rubric and no pass bar. His sections are Identity, Role, Reading a founder (his routing instincts), Style, and What he never does. Swap him by editing that file, but keep him a host: the moment he starts grading pitches, the investors have nothing left to do.
+
 ## Quality bar for PRs
 
 - Archetypes only. No real names, and no imitations of identifiable investors.

@@ -6,6 +6,7 @@
    and providers/, shared with the SDK. */
 
 import { TURN_SCHEMA, buildSystemPrompt } from "./core/turn.mjs";
+import { CONNECT_SCHEMA, CONNECTOR, buildConnectorPrompt } from "./core/connect.mjs";
 import { STAGES } from "./core/stages.mjs";
 import { providers, DEFAULT_MODELS } from "./providers/index.mjs";
 
@@ -36,11 +37,11 @@ async function loadConfig() {
     : `Keys found in your shell env: ${found}. Voice falls back to the browser's own speech; set OPENAI_API_KEY for the real one.`;
 }
 
-async function callProvider({ model, system, messages }) {
+async function callProvider({ model, system, messages, schema = TURN_SCHEMA }) {
   const resp = await fetch("/api/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ provider: els.provider.value, model, system, messages, schema: TURN_SCHEMA }),
+    body: JSON.stringify({ provider: els.provider.value, model, system, messages, schema }),
   });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) throw new Error(data.error || `Server error (${resp.status})`);
@@ -49,12 +50,15 @@ async function callProvider({ model, system, messages }) {
 
 // ------------------------------------------------------------------ state
 const state = {
-  stage: null,        // current STAGES entry
-  chain: null,        // {fromWho, weaknesses, pitch} when warm-introduced
+  mode: null,         // "connect" (the host) | "grill" (an investor)
+  stage: null,        // current STAGES entry (grill mode)
+  who: "",            // display name of whoever is across the table
+  chain: null,        // {kind:"warm",fromWho,weaknesses,pitch} | {kind:"note",fromWho,note,pitch}
   system: null,
   messages: [],
-  started: false,     // first send is the pitch
+  started: false,     // first send is the pitch (grill mode)
   pitchText: "",
+  founderInputs: [],  // everything the founder told the host; longest one becomes the pitch
   lastReport: null,
   busy: false,
 };
@@ -63,7 +67,7 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const els = {
   lobby: $("scene-lobby"), room: $("scene-room"),
-  stages: $("stages"), keyStatus: $("key-status"),
+  stages: $("stages"), keyStatus: $("key-status"), meetHost: $("meet-host"),
   history: $("history"), panelHistory: $("panel-history"), clearHistory: $("clear-history"),
   openSettings: $("open-settings"), settings: $("settings"), closeSettings: $("close-settings"),
   provider: $("provider"), model: $("model"),
@@ -133,9 +137,17 @@ function renderDoors() {
 }
 
 // ------------------------------------------------------------------- room
+async function fetchPersona(file) {
+  const resp = await fetch(file);
+  if (!resp.ok) throw new Error();
+  return resp.text();
+}
+
 async function enterRoom(stage, chain) {
   stopSpeaking();
+  state.mode = "grill";
   state.stage = stage;
+  state.who = stage.who;
   state.chain = chain;
   state.messages = [];
   state.started = false;
@@ -146,43 +158,96 @@ async function enterRoom(stage, chain) {
 
   let personaMd;
   try {
-    const resp = await fetch(stage.file);
-    if (!resp.ok) throw new Error();
-    personaMd = await resp.text();
+    personaMd = await fetchPersona(stage.file);
   } catch {
     showError("Couldn't load the persona file. Serve this folder with node server.mjs; opening index.html directly via file:// blocks it.");
     return;
   }
 
-  const priorWeaknesses = chain
+  const warm = chain?.kind === "warm";
+  const noted = chain?.kind === "note";
+  const priorWeaknesses = warm
     ? chain.weaknesses
     : loadHistory().filter((h) => h.stage === stage.id).pop()?.report?.weaknesses;
-  const warmIntro = chain
+  const warmIntro = warm
     ? `${chain.fromWho} put this founder through a full grilling, vouched for them, and made this introduction personally.`
     : null;
-  state.system = buildSystemPrompt(personaMd, priorWeaknesses, warmIntro);
+  state.system = buildSystemPrompt(personaMd, priorWeaknesses, warmIntro, noted ? chain.note : null);
 
   // set the scene
   els.roomName.textContent = stage.who;
   els.roomTag.hidden = !chain;
-  if (chain) els.roomTag.textContent = `intro from ${chain.fromWho}`;
+  if (chain) els.roomTag.textContent = warm ? `intro from ${chain.fromWho}` : `sent up by ${chain.fromWho}`;
+  els.leave.textContent = "← Leave";
   els.lobby.hidden = true;
   els.room.hidden = false;
   els.transcript.innerHTML = "";
   els.mic.hidden = !SpeechRec;
 
   // the investor speaks first
-  const opener = chain ? stage.introOpener : stage.opener;
+  const opener = warm ? stage.introOpener : noted ? stage.notedOpener : stage.opener;
   addOpenerTurn(opener);
   speak([opener]);
 
+  els.answer.disabled = false;
   els.answer.value = chain ? chain.pitch : "";
   els.answer.placeholder = "Your pitch. Paste it, attach a deck, or just talk…";
   autogrow();
   els.answer.focus({ preventScroll: true });
-  els.deckStatus.textContent = chain
+  els.deckStatus.textContent = warm
     ? "Same pitch, pre-filled. Tighten it if you learned something downstairs, then send."
-    : "";
+    : noted
+      ? "His note went up ahead of you. What you told him is pre-filled; shape it into the pitch, then send."
+      : "";
+}
+
+// The front door: Mr. Knows-Everybody hears you out, then routes you.
+async function enterConnector() {
+  stopSpeaking();
+  state.mode = "connect";
+  state.stage = null;
+  state.who = CONNECTOR.who;
+  state.chain = null;
+  state.messages = [];
+  state.started = false;
+  state.founderInputs = [];
+  state.lastReport = null;
+  els.sessionError.innerHTML = "";
+  els.deckStatus.textContent = "";
+
+  let personaMd;
+  try {
+    personaMd = await fetchPersona(CONNECTOR.file);
+  } catch {
+    showError("Couldn't load the host persona. Serve this folder with node server.mjs; opening index.html directly via file:// blocks it.");
+    return;
+  }
+
+  const past = loadHistory().slice(-3).map((h) => ({
+    when: new Date(h.ts).toISOString().slice(0, 10),
+    stageName: h.stageName,
+    who: h.who,
+    total: h.total,
+  }));
+  state.system = buildConnectorPrompt(personaMd, past);
+
+  els.roomName.textContent = CONNECTOR.who;
+  els.roomTag.hidden = true;
+  els.leave.textContent = "Skip the small talk";
+  els.lobby.hidden = true;
+  els.room.hidden = false;
+  els.transcript.innerHTML = "";
+  els.mic.hidden = !SpeechRec;
+
+  const opener = past.length ? CONNECTOR.openerReturning : CONNECTOR.opener;
+  addOpenerTurn(opener);
+  speak([opener]);
+
+  els.answer.disabled = false;
+  els.answer.value = "";
+  els.answer.placeholder = "Tell him how it's going, paste your blurb, or attach the deck…";
+  autogrow();
+  els.answer.focus({ preventScroll: true });
 }
 
 function leaveRoom() {
@@ -208,9 +273,19 @@ function scrollTranscript(el) {
 function addOpenerTurn(text) {
   const div = document.createElement("div");
   div.className = "turn investor";
-  div.innerHTML = `<div class="who">${esc(state.stage.who)}</div>
+  div.innerHTML = `<div class="who">${esc(state.who)}</div>
     <div class="bubble"><div class="opener">“${esc(text)}”</div></div>`;
   els.transcript.appendChild(div);
+}
+
+// The host talks in plain dialogue: no rounds, no grades, no lists.
+function addConnectorTurn(text) {
+  const div = document.createElement("div");
+  div.className = "turn investor";
+  div.innerHTML = `<div class="who">${esc(state.who)}</div>
+    <div class="bubble">“${esc(text)}”</div>`;
+  els.transcript.appendChild(div);
+  scrollTranscript(div);
 }
 
 function addFounderTurn(text) {
@@ -233,7 +308,7 @@ function addInvestorTurn(turn) {
   const grades = (turn.answer_grades || [])
     .map((g, i) => `<span class="grade ${esc(g.verdict)}" title="${esc(g.question)} — ${esc(g.note)}">Q${i + 1} ${g.score}/10 ${esc(g.verdict)}</span>`)
     .join("");
-  div.innerHTML = `<div class="who">${esc(state.stage.who)}</div>
+  div.innerHTML = `<div class="who">${esc(state.who)}</div>
     <div class="bubble">
       ${grades ? `<div class="grades">${grades}</div>` : ""}
       <div class="commentary">${esc(turn.commentary)}</div>
@@ -247,7 +322,9 @@ function addThinking() {
   const div = document.createElement("div");
   div.className = "thinking";
   div.id = "thinking";
-  div.textContent = `${state.stage.who} is weighing you`;
+  div.textContent = state.mode === "connect"
+    ? `${state.who} is thinking who you should meet`
+    : `${state.who} is weighing you`;
   els.transcript.appendChild(div);
   scrollTranscript();
 }
@@ -317,7 +394,7 @@ function renderMoment(report, total) {
   if (passed && nextStage) {
     mkBtn(`Take the intro → ${nextStage.who}`, "primary-btn", () => {
       div.remove();
-      enterRoom(nextStage, { fromWho: state.stage.who, weaknesses: report.weaknesses, pitch: state.pitchText });
+      enterRoom(nextStage, { kind: "warm", fromWho: state.stage.who, weaknesses: report.weaknesses, pitch: state.pitchText });
     });
     mkBtn("Retry my weakest answers", "mono-btn", () => retryWeakest(div));
   } else if (passed) {
@@ -340,6 +417,63 @@ async function retryWeakest(momentDiv) {
   state.messages.push({ role: "user", content: msg });
   addFounderTurn(msg);
   await investorTurn();
+}
+
+// The host has decided: he has texted ahead, the founder walks up.
+function renderRouteMoment(route) {
+  const stage = STAGES.find((s) => s.id === route.stage) || STAGES[0];
+  const pitch = state.founderInputs.reduce((a, b) => (b.length > a.length ? b : a), "");
+  const div = document.createElement("div");
+  div.className = "turn moment";
+  div.innerHTML = `<div class="moment-line pass">“${esc(route.reason)}”</div>
+    <div class="moment-actions"></div>`;
+  const go = document.createElement("button");
+  go.className = "primary-btn";
+  go.textContent = `Go on up → ${stage.who}`;
+  go.addEventListener("click", () => {
+    enterRoom(stage, { kind: "note", fromWho: CONNECTOR.who, note: route.intro_note, pitch });
+  });
+  div.querySelector(".moment-actions").appendChild(go);
+  els.transcript.appendChild(div);
+  els.answer.disabled = true;
+  els.answer.placeholder = "He's already texted ahead. Go on up.";
+  scrollTranscript(div);
+}
+
+async function sendToConnector(text) {
+  state.founderInputs.push(text);
+  state.messages.push({ role: "user", content: text });
+  addFounderTurn(text);
+  state.busy = true;
+  els.send.disabled = true;
+  els.sessionError.innerHTML = "";
+  addThinking();
+  try {
+    const turn = await callProvider({
+      model: els.model.value.trim(),
+      system: state.system,
+      messages: state.messages,
+      schema: CONNECT_SCHEMA,
+    });
+    state.messages.push({ role: "assistant", content: JSON.stringify(turn) });
+    removeThinking();
+    addConnectorTurn(turn.say);
+    speak([turn.say]);
+    if (turn.route) {
+      renderRouteMoment(turn.route);
+    } else {
+      if (turn.ask_for === "deck") {
+        els.deckStatus.textContent = "He wants the deck. Attach it with the clip; it parses in your browser and never leaves your machine.";
+      }
+      els.answer.focus({ preventScroll: true });
+    }
+  } catch (e) {
+    removeThinking();
+    showError(e.message);
+  } finally {
+    state.busy = false;
+    els.send.disabled = false;
+  }
 }
 
 // ---------------------------------------------------------------- session
@@ -385,6 +519,7 @@ async function sendAnswer() {
   els.answer.value = "";
   autogrow();
   els.deckStatus.textContent = "";
+  if (state.mode === "connect") return sendToConnector(text);
   if (!state.started) {
     state.started = true;
     state.pitchText = text;
@@ -596,8 +731,14 @@ els.clearHistory.addEventListener("click", () => {
 });
 
 // ------------------------------------------------------------------- boot
+els.meetHost.addEventListener("click", () => enterConnector());
+
 renderProviderOptions();
 restorePrefs();
 renderDoors();
 renderHistory();
-loadConfig();
+loadConfig().then(() => {
+  // With a key in the env, the front door opens on Mr. Knows-Everybody.
+  // Without one, the lobby stays up to show the key instructions.
+  if (Object.keys(DEFAULT_MODELS).some((p) => serverConfig.providers[p])) enterConnector();
+});

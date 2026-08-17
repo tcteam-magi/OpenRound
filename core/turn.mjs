@@ -67,7 +67,7 @@ export const TURN_SCHEMA = {
   additionalProperties: false,
 };
 
-export function buildSystemPrompt(personaMd, priorWeaknesses, warmIntro) {
+export function buildSystemPrompt(personaMd, priorWeaknesses, warmIntro, connectorNote) {
   const intro = warmIntro
     ? `
 
@@ -75,6 +75,16 @@ WARM INTRO
 ${warmIntro} A warm intro raises your expectations rather than lowering them.
 Acknowledge the introduction naturally in your first commentary, then grill
 exactly as you always do.`
+    : "";
+  const noted = connectorNote
+    ? `
+
+INTRO NOTE
+The founder was sent up by a connector who introduces everyone. His note is
+context, not an endorsement, and it moves your bar in neither direction. It
+read: "${connectorNote}"
+You have skimmed it. Still make the founder pitch live, in their own words,
+and grill exactly as you always do.`
     : "";
   const history = priorWeaknesses && priorWeaknesses.length
     ? `
@@ -141,5 +151,5 @@ Every turn must satisfy the JSON schema you are constrained to:
   cannot score above 3, and dodged questions belong in weaknesses. Weaknesses:
   the 2-3 answers that hurt the founder most, quoted by gist, with why_it_hurt
   in your voice. Verdict: 2-4 sentences, in character, ending with whether you
-  would take the next meeting.${intro}${history}`;
+  would take the next meeting.${intro}${noted}${history}`;
 }

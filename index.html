@@ -45,19 +45,29 @@
     <!-- 3. pitch -->
     <section class="panel" id="panel-pitch">
       <h2><span class="step">3</span>Your pitch</h2>
-      <textarea id="pitch" placeholder="Paste your pitch script, speaker notes, or a text summary of your deck. The more real numbers and claims it contains, the better the grilling."></textarea>
+      <div class="upload-row">
+        <label class="upload-btn" for="deck">Upload deck</label>
+        <input type="file" id="deck" accept=".pdf,.pptx,.docx,.txt,.md" hidden />
+        <span class="upload-status" id="deck-status">pdf · pptx · docx · txt — parsed in your browser, the file never leaves this page. Or just drop it on the box below.</span>
+      </div>
+      <textarea id="pitch" placeholder="Paste your pitch script, speaker notes, or a text summary of your deck — or upload/drop a deck above. The more real numbers and claims it contains, the better the grilling."></textarea>
       <button class="primary" id="start">Enter the room</button>
       <div id="setup-error"></div>
     </section>
 
     <!-- 4. session -->
     <section class="panel" id="panel-session" hidden>
-      <h2><span class="step">4</span>The grilling</h2>
+      <h2><span class="step">4</span>The grilling
+        <button class="ghost mini" id="voice-toggle" title="Read questions aloud (browser speech synthesis)">Voice: off</button>
+      </h2>
       <div id="transcript"></div>
       <div id="answer-box" hidden>
         <label for="answer">Your answer</label>
         <textarea id="answer" placeholder="Answer the questions above. Numbered answers are fine."></textarea>
-        <button class="primary" id="send">Answer</button>
+        <div class="row">
+          <button class="primary" id="send">Answer</button>
+          <button class="ghost" id="mic" hidden>&#127908; Speak</button>
+        </div>
       </div>
       <div id="session-error"></div>
     </section>
@@ -72,11 +82,20 @@
       </div>
     </section>
 
+    <!-- 6. history -->
+    <section class="panel" id="panel-history" hidden>
+      <h2><span class="step">&#8734;</span>Past grillings</h2>
+      <p class="hint">Saved in this browser's localStorage. When you face the same stage again, the investor remembers your weakest answers — and re-tests them.</p>
+      <div id="history"></div>
+      <button class="ghost" id="clear-history">Clear history</button>
+    </section>
+
     <footer>
       <p>Personas are archetypes, not real investors — see <a href="PERSONA_FORMAT.md">PERSONA_FORMAT.md</a> to contribute one. MIT licensed.</p>
     </footer>
   </div>
 
+  <script src="parse.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

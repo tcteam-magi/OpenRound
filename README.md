@@ -35,11 +35,20 @@ Each investor lives in a plain markdown file under [`personas/`](personas/) — 
 
 Think your region's or sector's investors ask differently? **Write that persona and open a PR.** No real investors are impersonated — personas are archetypes built from public knowledge about how each stage evaluates.
 
+## Beyond the basics
+
+- **Deck upload** — drop a `.pdf`, `.pptx`, `.docx`, `.txt`, or `.md` on the pitch box (or use the upload button). It's parsed **in your browser** — pdf.js and JSZip are lazy-loaded from a CDN, and the file itself never leaves the page. The extracted text lands in the pitch box for you to review and edit before entering the room. Scanned or image-only decks won't extract; paste text for those.
+- **Voice mode** — toggle **Voice** in the grilling room and the investor asks their questions out loud (browser speech synthesis). The **Speak** button dictates your answer via the Web Speech API — works best in Chrome, and hides itself where unsupported. No extra keys, no audio leaves your machine except to your browser's own speech service.
+- **Session history** — every report is saved to this browser's localStorage (last 30). The **Past grillings** panel tracks your scores per stage over time, and when you face the same stage again, **the investor remembers your weakest answers and re-tests at least one**. That's the practice loop: get grilled, fix it, come back, prove it.
+
 ## What this is not (yet)
 
-- **No deck upload yet** — paste text; pdf/pptx parsing is on the roadmap.
-- **No voice mode yet** — text first; a voice grilling mode is planned.
-- **No session history yet** — each grilling stands alone (the retry button covers the practice loop for now).
+- **No cloud sync** — history lives in one browser's localStorage.
+- **No nuanced voice** — browser TTS is what it is; a provider-quality voice mode is planned.
+
+## Acknowledgements
+
+The client-side pptx/docx parsing approach (which OOXML parts are the source of truth, text-fidelity rules) adapts [genoffice](https://github.com/genspark-ai/genoffice)'s `file-parse` package (Apache-2.0), reimplemented for the browser on DOMParser.
 
 ## License
 

@@ -83,7 +83,17 @@ const TURN_SCHEMA = {
 };
 
 // ------------------------------------------------------------ system prompt
-function buildSystemPrompt(personaMd) {
+function buildSystemPrompt(personaMd, priorWeaknesses) {
+  const history = priorWeaknesses && priorWeaknesses.length
+    ? `
+
+FOUNDER HISTORY
+You have grilled this founder before. Last time, their weakest answers were:
+${priorWeaknesses.map((w) => `- ${w.question} — ${w.why_it_hurt}`).join("\n")}
+Weave at least one question that re-tests whether they have fixed the weakest
+of these into Round 2 or Round 3, in your own words. If they have clearly
+improved on a past weakness, say so in the report — in character, briefly.`
+    : "";
   return `You are conducting a live pitch-grilling session. Adopt, completely and
 in character, the investor persona defined between the markers below. The
 persona file is your identity, your evaluation rubric, your red flags, your
@@ -125,7 +135,7 @@ Every turn must satisfy the JSON schema you are constrained to:
   the answer fully met your pass bar. Weaknesses: the 2-3 answers that hurt
   the founder most, quoted by gist, with why_it_hurt in your voice. Verdict:
   2-4 sentences, in character, ending with whether you would take the next
-  meeting.`;
+  meeting.${history}`;
 }
 
 // -------------------------------------------------------------- providers
@@ -220,6 +230,9 @@ const els = {
   sessionError: $("session-error"),
   panelReport: $("panel-report"), report: $("report"),
   retry: $("retry"), restart: $("restart"),
+  deck: $("deck"), deckStatus: $("deck-status"),
+  voiceToggle: $("voice-toggle"), mic: $("mic"),
+  panelHistory: $("panel-history"), history: $("history"), clearHistory: $("clear-history"),
 };
 
 // ------------------------------------------------------------------ setup
@@ -331,6 +344,7 @@ function renderReport(report) {
   els.panelReport.hidden = false;
   els.retry.hidden = report.weaknesses.length === 0;
   els.panelReport.scrollIntoView({ behavior: "smooth", block: "start" });
+  saveSessionToHistory(report, total);
 }
 
 // ---------------------------------------------------------------- session
@@ -355,11 +369,14 @@ async function investorTurn() {
       addInvestorTurn({ ...turn, questions: [] });
       els.answerBox.hidden = true;
       renderReport(turn.report);
+      speak([turn.commentary, turn.report.verdict]);
     } else {
       addInvestorTurn(turn);
       els.answerBox.hidden = false;
+      els.mic.hidden = !SpeechRec;
       els.answer.value = "";
       els.answer.focus();
+      speak([turn.commentary, ...turn.questions.map((q, i) => `Question ${i + 1}. ${q}`)]);
     }
   } catch (e) {
     removeThinking();
@@ -390,7 +407,8 @@ els.start.addEventListener("click", async () => {
     els.setupError.innerHTML = `<div class="error">Couldn't load the persona file. Serve this folder over HTTP (e.g. <code>npx serve</code>) — opening index.html directly via file:// blocks it.</div>`;
     return;
   }
-  state.system = buildSystemPrompt(state.personaMd);
+  const lastSameStage = loadHistory().filter((h) => h.stage === state.stage.id).pop();
+  state.system = buildSystemPrompt(state.personaMd, lastSameStage?.report?.weaknesses);
   state.messages = [{ role: "user", content: `MY PITCH:\n\n${els.pitch.value.trim()}` }];
   els.transcript.innerHTML = "";
   els.panelSession.hidden = false;
@@ -429,6 +447,157 @@ els.restart.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
+// ------------------------------------------------------------ deck upload
+async function handleDeckFile(file) {
+  if (!file) return;
+  els.setupError.innerHTML = "";
+  els.deckStatus.textContent = `Parsing ${file.name}…`;
+  try {
+    const text = await OpenRoundParse.parseFile(file);
+    if (!text.trim()) {
+      throw new Error("No extractable text — scanned PDF or image-only deck? Paste your text instead.");
+    }
+    const existing = els.pitch.value.trim();
+    els.pitch.value = existing ? `${existing}\n\n${text}` : text;
+    els.deckStatus.textContent = `${file.name} → ${text.length.toLocaleString()} characters extracted. Review below, edit freely, then enter the room.`;
+  } catch (e) {
+    els.deckStatus.textContent = "";
+    els.setupError.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  } finally {
+    els.deck.value = "";
+  }
+}
+
+els.deck.addEventListener("change", () => handleDeckFile(els.deck.files[0]));
+els.pitch.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  els.pitch.classList.add("dropping");
+});
+els.pitch.addEventListener("dragleave", () => els.pitch.classList.remove("dropping"));
+els.pitch.addEventListener("drop", (e) => {
+  e.preventDefault();
+  els.pitch.classList.remove("dropping");
+  handleDeckFile(e.dataTransfer.files[0]);
+});
+
+// ------------------------------------------------------------------- voice
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+const voice = { on: false, rec: null, listening: false };
+
+function speak(parts) {
+  if (!voice.on || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(parts.filter(Boolean).join(" … "));
+  u.lang = "en-US";
+  u.rate = 1.02;
+  speechSynthesis.speak(u);
+}
+
+els.voiceToggle.addEventListener("click", () => {
+  voice.on = !voice.on;
+  els.voiceToggle.textContent = voice.on ? "Voice: on" : "Voice: off";
+  els.voiceToggle.classList.toggle("on", voice.on);
+  if (!voice.on && "speechSynthesis" in window) speechSynthesis.cancel();
+});
+
+function stopListening() {
+  voice.listening = false;
+  els.mic.textContent = "\u{1F3A4} Speak";
+  els.mic.classList.remove("recording");
+  if (voice.rec) voice.rec.stop();
+}
+
+els.mic.addEventListener("click", () => {
+  if (!SpeechRec) return;
+  if (voice.listening) return stopListening();
+  if ("speechSynthesis" in window) speechSynthesis.cancel(); // barge-in
+  voice.rec = new SpeechRec();
+  voice.rec.lang = "en-US";
+  voice.rec.continuous = true;
+  voice.rec.interimResults = false;
+  voice.rec.onresult = (e) => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        const t = e.results[i][0].transcript.trim();
+        if (t) els.answer.value = (els.answer.value.trim() + " " + t).trim();
+      }
+    }
+  };
+  voice.rec.onend = () => { if (voice.listening) stopListening(); };
+  voice.rec.onerror = () => stopListening();
+  voice.listening = true;
+  els.mic.textContent = "⏹ Stop";
+  els.mic.classList.add("recording");
+  voice.rec.start();
+});
+
+// ----------------------------------------------------------------- history
+const HISTORY_KEY = "pg.history";
+
+function loadHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSessionToHistory(report, total) {
+  const h = loadHistory();
+  h.push({
+    ts: Date.now(),
+    stage: state.stage.id,
+    stageName: state.stage.name,
+    who: state.stage.who,
+    total: Math.round(total),
+    report,
+  });
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(-30)));
+  renderHistory();
+}
+
+function renderHistory() {
+  const h = loadHistory();
+  els.panelHistory.hidden = h.length === 0;
+  if (!h.length) return;
+  els.history.innerHTML = "";
+  const prevByStage = {};
+  const rows = h.map((s) => {
+    const delta = prevByStage[s.stage] === undefined ? null : s.total - prevByStage[s.stage];
+    prevByStage[s.stage] = s.total;
+    return { s, delta };
+  });
+  for (const { s, delta } of rows.reverse()) {
+    const d = new Date(s.ts);
+    const when = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const deltaHtml = delta === null ? "" :
+      `<span class="delta ${delta >= 0 ? "up" : "down"}">${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta)} vs last ${esc(s.stageName)}</span>`;
+    const weak = (s.report.weaknesses || [])
+      .map((w) => `<li><strong>${esc(w.question)}</strong><br/><span class="why">${esc(w.why_it_hurt)}</span></li>`)
+      .join("");
+    const entry = document.createElement("details");
+    entry.className = "hist-entry";
+    entry.innerHTML = `
+      <summary>
+        <span class="hist-date">${when}</span>
+        <span class="hist-stage">${esc(s.stageName)}</span>
+        <span class="hist-score">${s.total}/100</span>
+        ${deltaHtml}
+      </summary>
+      <div class="hist-body">
+        <p class="verdict-line">“${esc(s.report.verdict)}”</p>
+        ${weak ? `<ul>${weak}</ul>` : ""}
+      </div>`;
+    els.history.appendChild(entry);
+  }
+}
+
+els.clearHistory.addEventListener("click", () => {
+  localStorage.removeItem(HISTORY_KEY);
+  renderHistory();
+});
+
 // ------------------------------------------------------------------- boot
 restorePrefs();
 renderStages();
+renderHistory();

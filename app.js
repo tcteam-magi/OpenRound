@@ -86,6 +86,9 @@ function esc(t) {
 
 function showError(msg) {
   els.sessionError.innerHTML = `<div class="error">${esc(msg)}</div>`;
+  // The error slot lives in the room scene; if the lobby is up, surface it
+  // there too instead of failing silently.
+  if (els.room.hidden) els.keyStatus.innerHTML = `<span class="error-inline">${esc(msg)}</span>`;
 }
 
 // ------------------------------------------------------------------ prefs
@@ -224,7 +227,7 @@ async function enterConnector() {
   }
 
   const past = loadHistory().slice(-3).map((h) => ({
-    when: new Date(h.ts).toISOString().slice(0, 10),
+    when: Number.isFinite(h.ts) ? new Date(h.ts).toISOString().slice(0, 10) : "a while back",
     stageName: h.stageName,
     who: h.who,
     total: h.total,
@@ -737,8 +740,10 @@ renderProviderOptions();
 restorePrefs();
 renderDoors();
 renderHistory();
-loadConfig().then(() => {
-  // With a key in the env, the front door opens on Mr. Knows-Everybody.
-  // Without one, the lobby stays up to show the key instructions.
-  if (Object.keys(DEFAULT_MODELS).some((p) => serverConfig.providers[p])) enterConnector();
-});
+loadConfig()
+  .then(() => {
+    // With a key in the env, the front door opens on Mr. Knows-Everybody.
+    // Without one, the lobby stays up to show the key instructions.
+    if (Object.keys(DEFAULT_MODELS).some((p) => serverConfig.providers[p])) return enterConnector();
+  })
+  .catch((e) => showError(`Couldn't open the front door: ${e.message}`));

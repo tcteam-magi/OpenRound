@@ -103,7 +103,12 @@ async function handleStatic(req, res) {
   }
   try {
     const data = await readFile(join(ROOT, path));
-    res.writeHead(200, { "content-type": MIME[extname(path)] || "application/octet-stream" });
+    res.writeHead(200, {
+      "content-type": MIME[extname(path)] || "application/octet-stream",
+      // Local serving straight from disk: never let the browser cache, so a
+      // git pull shows up on a plain refresh instead of a stale app.js.
+      "cache-control": "no-store",
+    });
     res.end(data);
   } catch {
     res.writeHead(404);

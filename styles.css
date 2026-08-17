@@ -298,6 +298,18 @@ button { cursor: pointer; font-family: var(--mono); }
 .moment .moment-line.pass { color: var(--paper); }
 .moment .moment-line.fail { color: var(--paper-dim); }
 .moment .moment-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+/* the text he actually sent, styled like a message bubble */
+.note-card {
+  max-width: 26rem; margin: 0 auto 1.4rem; text-align: left;
+  background: var(--ink-2); border: 1px solid var(--line);
+  border-radius: 10px 10px 10px 3px;
+  padding: 0.8rem 1rem; font-size: 0.92rem; line-height: 1.55; color: var(--paper);
+}
+.note-card .note-label {
+  display: block; font-family: var(--mono); font-size: 0.62rem;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--paper-dim);
+  margin-bottom: 0.45rem;
+}
 .primary-btn {
   font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase;
   background: var(--ember); color: #fff6ee; border: none; border-radius: 3px;

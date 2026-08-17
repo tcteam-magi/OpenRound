@@ -422,13 +422,13 @@ async function retryWeakest(momentDiv) {
   await investorTurn();
 }
 
-// The host has decided: he has texted ahead, the founder walks up.
+// The founder said yes: he texted ahead, and you get to read what he sent.
 function renderRouteMoment(route) {
   const stage = STAGES.find((s) => s.id === route.stage) || STAGES[0];
   const pitch = state.founderInputs.reduce((a, b) => (b.length > a.length ? b : a), "");
   const div = document.createElement("div");
   div.className = "turn moment";
-  div.innerHTML = `<div class="moment-line pass">“${esc(route.reason)}”</div>
+  div.innerHTML = `<div class="note-card"><span class="note-label">→ ${esc(stage.who)} · sent just now</span>${esc(route.intro_note)}</div>
     <div class="moment-actions"></div>`;
   const go = document.createElement("button");
   go.className = "primary-btn";
@@ -465,9 +465,9 @@ async function sendToConnector(text) {
     if (turn.route) {
       renderRouteMoment(turn.route);
     } else {
-      if (turn.ask_for === "deck") {
-        els.deckStatus.textContent = "He wants the deck. Attach it with the clip; it parses in your browser and never leaves your machine.";
-      }
+      els.answer.placeholder = turn.beat === "offer"
+        ? "Your call. Take the intro, ask about them, or keep talking…"
+        : "Answer him, paste your blurb, or attach the deck…";
       els.answer.focus({ preventScroll: true });
     }
   } catch (e) {

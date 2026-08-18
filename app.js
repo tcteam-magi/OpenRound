@@ -66,7 +66,7 @@ const state = {
 // --------------------------------------------------------------- elements
 const $ = (id) => document.getElementById(id);
 const els = {
-  lobby: $("scene-lobby"), room: $("scene-room"),
+  lobby: $("scene-lobby"), room: $("scene-room"), curtain: $("curtain"),
   stages: $("stages"), keyStatus: $("key-status"), meetHost: $("meet-host"),
   history: $("history"), panelHistory: $("panel-history"), clearHistory: $("clear-history"),
   openSettings: $("open-settings"), settings: $("settings"), closeSettings: $("close-settings"),
@@ -743,7 +743,12 @@ renderHistory();
 loadConfig()
   .then(() => {
     // With a key in the env, the front door opens on Mr. Knows-Everybody.
-    // Without one, the lobby stays up to show the key instructions.
+    // Without one, the lobby comes up to show the key instructions.
     if (Object.keys(DEFAULT_MODELS).some((p) => serverConfig.providers[p])) return enterConnector();
   })
-  .catch((e) => showError(`Couldn't open the front door: ${e.message}`));
+  .catch((e) => showError(`Couldn't open the front door: ${e.message}`))
+  .finally(() => {
+    if (els.room.hidden) els.lobby.hidden = false; // no keys, or the door failed
+    els.curtain?.remove();
+    els.curtain = null;
+  });
